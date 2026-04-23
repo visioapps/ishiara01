@@ -1,0 +1,1921 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test d'Ishiara</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+/* ── SCROLLBARS INVISIBLES (scroll fonctionnel mais barre cachée) ── */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: linear-gradient(135deg, #f0f4f8 0%, #e8eef5 100%);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── HEADER ── */
+.header {
+  background: white;
+  padding: 20px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  text-align: center;
+  flex-shrink: 0;
+}
+.header h1 { color:#2c5282; font-size:22px; font-weight:600; }
+
+/* ── LAYOUT GLOBAL ── */
+
+/* Zone fixe en haut */
+.sticky-top { flex-shrink: 0; background: transparent; }
+
+/* Zone scrollable — seul le contenu défile */
+.scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 16px 16px;
+}
+
+/* Centrage du contenu */
+.content-inner { max-width: 648px; margin: 0 auto; padding: 0; }
+
+/* ── CONTAINER ── */
+.container { max-width: 680px; margin: 0 auto; padding: 0; }
+
+/* ── BARRE NAV FIXE EN BAS ── */
+.bottom-nav {
+  flex-shrink: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 10px 16px;
+}
+.bottom-nav-inner {
+  max-width: 648px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+/* ── VIEW TABS (barre du bas) ── */
+.view-tab {
+  padding: 12px 8px;
+  border-radius: 8px; border: none;
+  background: #e2e8f0; font-size: 13px; font-weight: 500; color: #4a5568;
+  cursor: pointer; transition: all .3s; font-family: inherit;
+  text-align: center;
+}
+.view-tab.active {
+  background: linear-gradient(135deg,#4299e1,#3182ce);
+  color: white; box-shadow: 0 4px 12px rgba(66,153,225,.3);
+}
+
+/* ── CONTROLS — 4 colonnes fixes ── */
+.controls-bar {
+  background: white;
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+.ctrl-col {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Bouton condition discret */
+.toggle-btn {
+  width: 100%;
+  padding: 8px 6px;
+  border: 1.5px solid #d1e8f0;
+  background: white;
+  color: #2c5282;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  text-align: center;
+  user-select: none;
+}
+.toggle-btn:hover { background: #ebf4fb; border-color: #4299e1; }
+.toggle-btn:active { transform: scale(.97); }
+
+/* Date — même style que toggle-btn */
+.date-pill {
+  width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  background: white; border-radius: 8px; border: 1.5px solid #d1e8f0;
+  padding: 8px 6px;
+  font-size: 12px; color: #2c5282; font-weight: 500;
+  box-sizing: border-box; cursor: pointer;
+  transition: all 0.2s;
+}
+.date-pill:hover { background: #ebf4fb; border-color: #4299e1; }
+.date-pill input[type=date] {
+  border:none; background:transparent;
+  font-size:12px; color:#2c5282; font-weight:500;
+  outline:none; cursor:pointer; font-family:inherit;
+  width:auto; max-width:100%;
+}
+
+/* ── PROGRESS DOTS ── */
+.progress-wrap {
+  background: transparent;
+  padding: 4px 0; margin-bottom: 12px;
+  box-shadow: none;
+}
+.dots-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: visible;
+}
+.dot-circle {
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #e2e8f0;
+  transition: background .25s, transform .15s;
+  position: relative;
+}
+.dot-circle:hover { transform: scale(1.4); }
+.dot-circle.ok  { background: #48bb78; }
+.dot-circle.err { background: #fc8181; }
+
+/* Infobulle "Planche N" au survol des ronds */
+.dot-circle::after {
+  content: 'Planche ' attr(data-num);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.85);
+  background: #2d3748;
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .12s ease, transform .12s ease;
+  z-index: 100;
+}
+.dot-circle::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 1px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-top-color: #2d3748;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .12s ease;
+  z-index: 100;
+}
+.dot-circle:hover::after,
+.dot-circle:hover::before { opacity: 1; }
+.dot-circle:hover::after { transform: translateX(-50%) scale(1); }
+
+/* view-tabs défini plus haut */
+
+/* ── GRILLE PLANCHES ── */
+.planches-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.planche-card.full-width { grid-column: 1 / -1; }
+
+/* ── MOBILE : une planche par ligne ── */
+@media (max-width: 768px) {
+  .planches-list {
+    grid-template-columns: 1fr;
+  }
+  /* Cases "Conditions d'examen" : toutes à la même hauteur (alignées sur la plus grande)
+     et 4 colonnes strictement de même largeur */
+  .controls-bar {
+    align-items: stretch;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .ctrl-col     { align-items: stretch; min-width: 0; }
+  .toggle-btn, .date-pill { height: 100%; min-width: 0; }
+  /* Empêcher le champ date de pousser sa colonne plus large que 1/4 */
+  .date-pill { padding: 8px 4px; gap: 2px; overflow: hidden; }
+  .date-pill input[type=date] { min-width: 0; flex: 1; }
+  /* Barre de progression : autoriser les ronds à passer sur 2 lignes
+     pour qu'ils tiennent tous dans l'encart sur écran étroit */
+  .dots-row {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+}
+
+.planche-card {
+  background: white; border-radius: 14px; padding: 10px 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  border: 2px solid transparent;
+  transition: border-color .2s;
+}
+.planche-card.answered   { border-color: #bee3f8; }
+.planche-card.error-card { border-color: #fed7d7; }
+
+/* N° : ligne complète, fond transparent */
+.planche-num {
+  font-size: 9px; font-weight: 700; color: #a0aec0;
+  text-transform: uppercase; letter-spacing: .5px;
+  display: block; width: 100%; margin-bottom: 8px;
+}
+
+/* Ligne image + input + boutons */
+.planche-top {
+  display: flex; align-items: center; gap: 8px;
+}
+
+.planche-img-wrap {
+  width: 52px; height: 52px; flex-shrink: 0;
+  border-radius: 7px; overflow: hidden; background: #f0f4f8;
+  display: flex; align-items: center; justify-content: center;
+}
+.planche-img-wrap img { width: 100%; height: 100%; object-fit: cover; }
+.planche-img-placeholder { font-size: 16px; color: #a0aec0; }
+
+/* Champ de saisie : même hauteur que l'image */
+.planche-mid { flex: 1; min-width: 0; align-self: stretch; display: flex; align-items: center; }
+.answer-input {
+  border: 1.5px solid #e2e8f0; border-radius: 7px;
+  padding: 0 8px; font-size: 13px; font-weight: 600;
+  color: #2d3748; background: #f7fafc; outline: none;
+  width: 100%; height: 52px; text-align: center;
+  transition: border-color .2s; font-family: inherit;
+  display: block; box-sizing: border-box;
+}
+.answer-input:focus  { border-color: #4299e1; background: white; }
+.answer-input.correct{ border-color: #48bb78; background: #f0fff4; }
+.answer-input.wrong  { border-color: #fc8181; background: #fff5f5; }
+
+/* Affichage trajet : même style que answer-input */
+.trajet-sel {
+  border: 1.5px solid #e2e8f0; border-radius: 7px;
+  padding: 0 8px; font-size: 12px; font-weight: 600;
+  color: #4a5568; background: #f7fafc;
+  width: 100%; height: 52px; text-align: center;
+  display: flex; align-items: center; justify-content: center;
+  box-sizing: border-box; transition: border-color .2s;
+}
+.trajet-sel.answered { border-color: #48bb78; background: #f0fff4; color: #22543d; }
+.trajet-sel.wrong    { border-color: #fc8181; background: #fff5f5; color: #c53030; }
+
+/* Boutons Correct + Non vu côte à côte avec label dessous */
+.planche-actions {
+  display: flex; flex-direction: row; gap: 6px; flex-shrink: 0; align-items: center;
+}
+.btn-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.btn-wrap span {
+  font-size: 9px; color: #a0aec0; font-weight: 500; white-space: nowrap;
+}
+.btn-valider {
+  width: 32px; height: 32px; border-radius: 50%; border: 2px solid #48bb78;
+  background: white; color: #48bb78; font-size: 15px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all .2s; user-select: none;
+}
+.btn-valider:hover { background: #f0fff4; }
+.btn-valider:active { transform: scale(.93); }
+.btn-nonvu {
+  width: 32px; height: 32px; border-radius: 50%; border: 2px solid #a0aec0;
+  background: white; color: #a0aec0; font-size: 15px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all .2s; user-select: none;
+}
+.btn-nonvu:hover { border-color: #718096; color: #718096; background: #f7fafc; }
+.btn-nonvu:active { transform: scale(.93); }
+
+/* Suggestions (ligne basse) */
+.planche-options {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid #f0f4f8;
+}
+.suggestions-label {
+  font-size: 10px; color: #a0aec0; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .3px; margin-right: 2px;
+}
+.opt-badge {
+  font-size: 11px; padding: 2px 8px; border-radius: 6px; font-weight: 500;
+  cursor: pointer; user-select: none;
+  background: #f0f4f8; color: #4a5568; border: 1px solid #e2e8f0;
+  transition: all .15s;
+}
+.opt-badge:hover { background: #e8eef5; border-color: #cbd5e0; }
+.opt-badge:active { transform: scale(.95); }
+.opt-badge.is-normal { border-color: #b2dfdb; color: #2c5282; background: #f0f9ff; }
+
+/* Checkboxes trajets */
+.check-label {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: #4a5568; cursor: pointer;
+  background: #f7fafc; border: 1.5px solid #e2e8f0;
+  border-radius: 7px; padding: 4px 9px;
+  transition: all .2s; user-select: none;
+}
+.check-label.checked { background: #ebf4fb; border-color: #4299e1; color: #2c5282; font-weight: 600; }
+
+.status-icon { font-size: 12px; color: #a0aec0; margin-left: 3px; }
+
+/* ── RESULT ── */
+.result-view { display:none; }
+.result-view.active { display:block; }
+
+.result-card {
+  background:white; border-radius:16px; padding:20px; margin-bottom:14px;
+  box-shadow:0 4px 20px rgba(0,0,0,0.08);
+}
+.result-card h2 { font-size:11px; font-weight:700; color:#2c5282; text-transform:uppercase; letter-spacing:.5px; margin-bottom:14px; }
+
+.score-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.score-stat {
+  background: #f7fafc;
+  border-radius: 10px;
+  padding: 14px 8px;
+  text-align: center;
+}
+.score-stat-val {
+  font-size: 22px;
+  font-weight: 700;
+  color: #2c5282;
+  margin-bottom: 4px;
+}
+.score-stat-lbl {
+  font-size: 11px;
+  color: #718096;
+  font-weight: 500;
+}
+.score-verdict {
+  margin-top:10px; padding:10px 16px;
+  border-radius:10px; font-size:13px; font-weight:600; text-align:center;
+}
+.verdict-ok    { background:#c6f6d5; color:#22543d; }
+.verdict-dys   { background:#feebc8; color:#7c2d12; }
+.verdict-achro { background:#fed7d7; color:#742a2a; }
+
+.histo-line { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.histo-lbl  { font-size:12px; color:#4a5568; width:220px; flex-shrink:0; }
+.histo-lbl.indent { padding-left:12px; color:#718096; font-size:11px; }
+.histo-bar-bg  { flex:1; height:10px; background:#e2e8f0; border-radius:99px; overflow:hidden; }
+.histo-bar-bg.short { flex:none; width:45%; height:7px; background:#eef2f7; }
+.histo-bar-fill{ height:100%; background:#bee3f8; border-radius:99px; transition:width .6s; }
+.histo-bar-fill.highlight { background:linear-gradient(90deg,#4299e1,#2c5282); }
+.histo-bar-fill.sub { background:#c8d8e8; }
+.histo-pct { font-size:12px; font-weight:600; color:#4a5568; width:38px; text-align:right; }
+.histo-pct.sub { color:#a0aec0; font-size:11px; }
+
+.info-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:12px; }
+.info-item { background:#f7fafc; border-radius:8px; padding:7px 10px; }
+.info-item strong { color:#2c5282; display:block; font-size:10px; text-transform:uppercase; letter-spacing:.4px; margin-bottom:2px; }
+
+.detail-table { width:100%; border-collapse:collapse; font-size:12px; }
+.detail-table th { background:#2c5282; color:white; padding:6px 8px; text-align:center; font-weight:600; }
+.detail-table td { padding:5px 8px; text-align:center; border-bottom:1px solid #e2e8f0; }
+.detail-table tr:nth-child(even) td { background:#f7fafc; }
+.cell-ok  { background:#c6f6d5 !important; color:#22543d; font-weight:600; }
+.cell-err { background:#fed7d7 !important; color:#742a2a; font-weight:600; }
+
+/* ── BUTTONS ── */
+.btn {
+  flex:1; padding:12px; border:none; border-radius:8px;
+  font-size:13px; font-weight:600; cursor:pointer;
+  transition:all .2s; font-family:inherit;
+}
+.btn-primary {
+  background:linear-gradient(135deg,#4299e1,#3182ce);
+  color:white; box-shadow:0 4px 12px rgba(66,153,225,.3);
+}
+.btn-primary:hover { transform:translateY(-1px); box-shadow:0 6px 16px rgba(66,153,225,.4); }
+.btn-secondary { background:#e2e8f0; color:#4a5568; }
+.btn-secondary:hover { background:#cbd5e0; }
+
+/* ── MODAL ── */
+.modal-overlay {
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,.35); z-index:1000;
+  align-items:center; justify-content:center;
+}
+.modal-overlay.open { display:flex; }
+.modal {
+  background:white; border-radius:20px; padding:28px;
+  width:340px; box-shadow:0 8px 40px rgba(0,0,0,.2);
+}
+.modal h3 { color:#2c5282; font-size:16px; font-weight:600; margin-bottom:16px; }
+.field-row { margin-bottom:12px; }
+.field-row label { display:block; font-size:11px; font-weight:600; color:#718096; margin-bottom:4px; text-transform:uppercase; letter-spacing:.4px; }
+.field-row input[type=text] {
+  width:100%; padding:9px 12px;
+  border:1.5px solid #e2e8f0; border-radius:9px;
+  font-size:13px; color:#2d3748; background:#f7fafc;
+  outline:none; transition:border-color .2s; font-family:inherit;
+}
+.field-row input[type=text]:focus { border-color:#4299e1; background:white; }
+.modal-btns { display:flex; gap:10px; margin-top:20px; }
+.modal-btns .btn { flex:1; }
+
+/* ── TOAST ── */
+.toast {
+  position:fixed; bottom:20px; left:50%;
+  transform:translateX(-50%) translateY(80px);
+  background:#2c5282; color:white;
+  padding:10px 22px; border-radius:99px;
+  font-size:13px; font-weight:500;
+  transition:transform .3s; z-index:9999;
+  box-shadow:0 4px 16px rgba(44,82,130,.4); white-space:nowrap;
+}
+.toast.show { transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Test d'Ishiara</h1>
+</div>
+
+<!-- ZONE FIXE HAUT -->
+<div class="sticky-top">
+  <div class="container" style="max-width:680px;margin:0 auto;padding:12px 16px 0;">
+
+    <!-- CONTROLS -->
+    <div class="progress-wrap" id="conditionsWrap" style="margin-bottom:10px;background:white;border-radius:12px;padding:12px 16px;box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+      <div style="font-size:11px;font-weight:700;color:#2c5282;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">Conditions d'examen <span style="font-weight:400;text-transform:none;color:#a0aec0;font-size:10px;">(Cliquez pour modifier)</span></div>
+      <div class="controls-bar" style="margin-bottom:0;box-shadow:none;background:transparent;padding:0;">
+        <div class="ctrl-col">
+          <button class="toggle-btn" id="btnVersion" onclick="cycleVersion()">Version complète</button>
+        </div>
+        <div class="ctrl-col">
+          <button class="toggle-btn" id="btnCorrection" onclick="cycleCorrection()">Avec correction</button>
+        </div>
+        <div class="ctrl-col">
+          <button class="toggle-btn" id="btnOeil" onclick="cycleOeil()">Binoculaire</button>
+        </div>
+        <div class="ctrl-col">
+          <div class="date-pill">
+            <span>📅</span>
+            <input type="date" id="dateExamen" onchange="updateInfoGrid()">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RÉPONSES + PROGRESS (fixe en haut, visible uniquement en saisie) -->
+    <div id="stickySaisie">
+      <div style="padding:0 0 6px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:11px;font-weight:700;color:#2c5282;text-transform:uppercase;letter-spacing:.5px;">Réponses</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" id="btnFillNormal" onclick="fillAllNormal()"
+            style="font-family:inherit;font-size:11px;font-weight:600;color:#2c5282;background:white;border:1.5px solid #d1e8f0;border-radius:8px;padding:5px 10px;cursor:pointer;transition:all .2s;"
+            onmouseover="this.style.background='#ebf4fb';this.style.borderColor='#4299e1';"
+            onmouseout="this.style.background='white';this.style.borderColor='#d1e8f0';"
+            title="Remplir toutes les réponses comme un sujet à vision normale">✓ Test normal</button>
+          <button type="button" id="btnResetTop" onclick="resetAll()"
+            style="font-family:inherit;font-size:11px;font-weight:600;color:#c53030;background:white;border:1.5px solid #fed7d7;border-radius:8px;padding:5px 10px;cursor:pointer;transition:all .2s;"
+            onmouseover="this.style.background='#fff5f5';this.style.borderColor='#fc8181';"
+            onmouseout="this.style.background='white';this.style.borderColor='#fed7d7';"
+            title="Réinitialiser le test">↺ Réinitialiser</button>
+        </div>
+      </div>
+      <!-- PROGRESS DOTS -->
+      <div class="progress-wrap" id="progressSection" style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="font-size:12px;color:#718096;font-weight:500" id="progLbl">0 / 38</span>
+          <span style="font-size:12px;color:#718096;font-weight:500" id="progPct">0%</span>
+        </div>
+        <div class="dots-row" id="dotsRow"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ZONE SCROLLABLE (milieu) -->
+<div class="scroll-area">
+  <div class="content-inner">
+
+    <!-- SAISIE -->
+    <div id="viewPlanches">
+      <div class="planches-list" id="planchesList"></div>
+    </div>
+
+    <!-- RÉSULTATS -->
+    <div id="viewResult" class="result-view">
+      <div class="result-card">
+        <h2>Score global</h2>
+        <div class="score-stats" id="scoreStats">
+          <div class="score-stat">
+            <div class="score-stat-val" id="resCorrect">—</div>
+            <div class="score-stat-lbl">Réponses correctes</div>
+          </div>
+          <div class="score-stat">
+            <div class="score-stat-val" id="resErrors">—</div>
+            <div class="score-stat-lbl">Erreurs</div>
+          </div>
+          <div class="score-stat">
+            <div class="score-stat-val" id="resTauxErr">—</div>
+            <div class="score-stat-lbl">Taux d'erreur</div>
+          </div>
+        </div>
+        <div class="score-verdict" id="resVerdict"></div>
+      </div>
+      <div class="result-card">
+        <h2>Répartition par type de dyschromatopsie</h2>
+        <div id="histoWrap"></div>
+      </div>
+      <div class="result-card">
+        <h2>Détail par planche</h2>
+        <div style="overflow-x:auto">
+          <table class="detail-table">
+            <thead>
+              <tr>
+                <th rowspan="2">N°</th>
+                <th rowspan="2">Rép. patient</th>
+                <th rowspan="2">Normal</th>
+                <th colspan="2">Protan</th>
+                <th colspan="2">Deutan</th>
+              </tr>
+              <tr>
+                <th>grave</th><th>léger</th><th>grave</th><th>léger</th>
+              </tr>
+            </thead>
+            <tbody id="detailBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- BARRE NAV FIXE EN BAS -->
+<div class="bottom-nav">
+  <div class="bottom-nav-inner">
+    <button class="view-tab active" id="tabSaisie"    onclick="switchView('planches',this)">Saisie</button>
+    <button class="view-tab"        id="tabResultats" onclick="switchView('result',this)">Résultats</button>
+    <button class="view-tab"        id="tabPdf"       onclick="openPdfModal()">⬇ PDF</button>
+  </div>
+</div>
+
+<!-- PDF Modal -->
+<div class="modal-overlay" id="pdfModal">
+  <div class="modal">
+    <h3>Télécharger le rapport PDF</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="field-row">
+        <label>Nom</label>
+        <input type="text" id="pdfNom" placeholder="DUPONT" autocomplete="off">
+      </div>
+      <div class="field-row">
+        <label>Prénom</label>
+        <input type="text" id="pdfPrenom" placeholder="Jean" autocomplete="off">
+      </div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="closePdfModal()">Annuler</button>
+      <button class="btn btn-primary"   onclick="generatePDF()">Télécharger</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Modal -->
+<div class="modal-overlay" id="resetModal">
+  <div class="modal">
+    <h3>Réinitialiser le test</h3>
+    <p style="font-size:13px;color:#4a5568;">Êtes-vous sûr de vouloir réinitialiser ? Toutes les réponses seront effacées. Cette action est irréversible.</p>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="closeResetModal()">Annuler</button>
+      <button class="btn btn-primary"   onclick="confirmReset()" style="background:linear-gradient(135deg,#fc8181,#e53e3e);box-shadow:0 4px 12px rgba(229,62,62,.3)">Réinitialiser</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// DONNÉES
+// ═══════════════════════════════════════════════════════════
+const PLANCHES_DATA = {
+  // ── Planches 1-9 : normale + dyschro différents ──
+  1: {type:'chiffre', normale:'12', protG:'12',  protL:'12',  deutG:'12',  deutL:'12'},
+  2: {type:'chiffre', normale:'8',  protG:'3',   protL:'3',   deutG:'3',   deutL:'3'},
+  3: {type:'chiffre', normale:'6',  protG:'5',   protL:'5',   deutG:'5',   deutL:'5'},
+  4: {type:'chiffre', normale:'29', protG:'70',  protL:'70',  deutG:'70',  deutL:'70'},
+  5: {type:'chiffre', normale:'57', protG:'35',  protL:'35',  deutG:'35',  deutL:'35'},
+  6: {type:'chiffre', normale:'5',  protG:'2',   protL:'2',   deutG:'2',   deutL:'2'},
+  7: {type:'chiffre', normale:'3',  protG:'5',   protL:'5',   deutG:'5',   deutL:'5'},
+  8: {type:'chiffre', normale:'15', protG:'17',  protL:'17',  deutG:'17',  deutL:'17'},
+  9: {type:'chiffre', normale:'74', protG:'21',  protL:'21',  deutG:'21',  deutL:'21'},
+  // ── Planches 10-17 : dyschro ne voit rien (x) ──
+  10:{type:'chiffre', normale:'2',  protG:'x',   protL:'x',   deutG:'x',   deutL:'x'},
+  11:{type:'chiffre', normale:'6',  protG:'x',   protL:'x',   deutG:'x',   deutL:'x'},
+  12:{type:'chiffre', normale:'97', protG:'x',   protL:'x',   deutG:'x',   deutL:'x'},
+  13:{type:'chiffre', normale:'45', protG:'x',   protL:'x',   deutG:'x',   deutL:'x'},
+  14:{type:'chiffre', normale:'5',  protG:'x',   protL:'x',   deutG:'x',   deutL:'x'},
+  15:{type:'chiffre', normale:'7',  protG:'x',   protL:'x',   deutG:'x',   deutL:'x'},
+  16:{type:'chiffre', normale:'16', protG:'x',   protL:'x',   deutG:'x',   deutL:'x'},
+  17:{type:'chiffre', normale:'73', protG:'x',   protL:'x',   deutG:'x',   deutL:'x'},
+  // ── Planches 18-21 : normale = x, dyschro voit un chiffre ──
+  18:{type:'chiffre', normale:'x',  protG:'5',   protL:'5',   deutG:'5',   deutL:'5'},
+  19:{type:'chiffre', normale:'x',  protG:'2',   protL:'2',   deutG:'2',   deutL:'2'},
+  20:{type:'chiffre', normale:'x',  protG:'45',  protL:'45',  deutG:'45',  deutL:'45'},
+  21:{type:'chiffre', normale:'x',  protG:'73',  protL:'73',  deutG:'73',  deutL:'73'},
+  // ── Planches 22-25 : classification protane/deutane ──
+  22:{type:'chiffre', normale:'26', protG:'6',   protL:'(2)6',deutG:'2',   deutL:'2(6)'},
+  23:{type:'chiffre', normale:'42', protG:'2',   protL:'(4)2',deutG:'4',   deutL:'4(2)'},
+  24:{type:'chiffre', normale:'35', protG:'5',   protL:'(3)5',deutG:'3',   deutL:'3(5)'},
+  25:{type:'chiffre', normale:'96', protG:'6',   protL:'(9)6',deutG:'9',   deutL:'9(6)'},
+  // ── Planches 26-27 : trajets discrimination protane/deutane ──
+  // Normale = tracé sup + inf ; protane = tracé inf (26) ou sup (27) ; deutane = inverse
+  26:{type:'trajet',
+    options:[
+      {label:'Tracé sup + inf', correct:true,  tag:'normale'},
+      {label:'Tracé inf',       correct:false, tag:'protG'},
+      {label:'Tracé sup',       correct:false, tag:'deutG'},
+      {label:'Aucun tracé',     correct:false, tag:'autre'},
+    ]},
+  27:{type:'trajet',
+    options:[
+      {label:'Tracé sup + inf', correct:true,  tag:'normale'},
+      {label:'Tracé sup',       correct:false, tag:'protG'},
+      {label:'Tracé inf',       correct:false, tag:'deutG'},
+      {label:'Aucun tracé',     correct:false, tag:'autre'},
+    ]},
+  // ── Planches 28-29 : normale = aucun tracé, dyschro = un tracé ──
+  28:{type:'trajet',
+    options:[
+      {label:'Aucun tracé', correct:true,  tag:'normale'},
+      {label:'Un tracé',    correct:false, tag:'dyschro'},
+    ]},
+  29:{type:'trajet',
+    options:[
+      {label:'Aucun tracé', correct:true,  tag:'normale'},
+      {label:'Un tracé',    correct:false, tag:'dyschro'},
+    ]},
+  // ── Planches 30-33 : normale = tracé, dyschro = aucun tracé ──
+  30:{type:'trajet',
+    options:[
+      {label:'Tracé normal', correct:true,  tag:'normale'},
+      {label:'Aucun tracé', correct:false, tag:'dyschro'},
+    ]},
+  31:{type:'trajet',
+    options:[
+      {label:'Tracé normal', correct:true,  tag:'normale'},
+      {label:'Aucun tracé', correct:false, tag:'dyschro'},
+    ]},
+  32:{type:'trajet',
+    options:[
+      {label:'Tracé normal', correct:true,  tag:'normale'},
+      {label:'Aucun tracé', correct:false, tag:'dyschro'},
+    ]},
+  33:{type:'trajet',
+    options:[
+      {label:'Tracé normal', correct:true,  tag:'normale'},
+      {label:'Aucun tracé', correct:false, tag:'dyschro'},
+    ]},
+  // ── Planches 34-37 : tracé différent pour dyschro ──
+  34:{type:'trajet',
+    options:[
+      {label:'Tracé normal',     correct:true,  tag:'normale'},
+      {label:'Tracé différent',  correct:false, tag:'dyschro'},
+    ]},
+  35:{type:'trajet',
+    options:[
+      {label:'Tracé normal',     correct:true,  tag:'normale'},
+      {label:'Tracé différent',  correct:false, tag:'dyschro'},
+    ]},
+  36:{type:'trajet',
+    options:[
+      {label:'Tracé normal',     correct:true,  tag:'normale'},
+      {label:'Tracé différent',  correct:false, tag:'dyschro'},
+    ]},
+  37:{type:'trajet',
+    options:[
+      {label:'Tracé normal',     correct:true,  tag:'normale'},
+      {label:'Tracé différent',  correct:false, tag:'dyschro'},
+    ]},
+  // ── Planche 38 : même réponse pour tout le monde ──
+  38:{type:'trajet',
+    options:[
+      {label:'Tracé normal', correct:true, tag:'normale'},
+      {label:'Aucun tracé', correct:false, tag:'autre'},
+    ]},
+};
+
+const VERSIONS = {
+  'Chiffres': Array.from({length:25},(_,i)=>i+1),
+  'Trajets':  Array.from({length:13},(_,i)=>i+26),
+  'Complète': Array.from({length:38},(_,i)=>i+1),
+};
+
+let answers = {};
+
+// ═══════════════════════════════════════════════════════════
+// TOGGLE CYCLIQUE
+// ═══════════════════════════════════════════════════════════
+const VERSION_CYCLE    = ['Version complète','Chiffres','Trajets'];
+const CORRECTION_CYCLE = ['Avec correction','Sans correction'];
+const OEIL_CYCLE       = ['Binoculaire','Oeil droit','Oeil gauche'];
+
+let versionIdx    = 0; // Complète
+let correctionIdx = 0; // Avec correction
+let oeilIdx       = 0; // Binoculaire
+
+function cycleVersion() {
+  versionIdx = (versionIdx + 1) % VERSION_CYCLE.length;
+  document.getElementById('btnVersion').textContent = VERSION_CYCLE[versionIdx];
+  buildPlanches();
+  updateInfoGrid();
+}
+function cycleCorrection() {
+  correctionIdx = (correctionIdx + 1) % CORRECTION_CYCLE.length;
+  document.getElementById('btnCorrection').textContent = CORRECTION_CYCLE[correctionIdx];
+  updateInfoGrid();
+}
+function cycleOeil() {
+  oeilIdx = (oeilIdx + 1) % OEIL_CYCLE.length;
+  document.getElementById('btnOeil').textContent = OEIL_CYCLE[oeilIdx];
+  updateInfoGrid();
+}
+
+function getVersion()    { return VERSION_CYCLE[versionIdx]; }
+function getCorrection() { return CORRECTION_CYCLE[correctionIdx]; }
+function getOeil()       { return OEIL_CYCLE[oeilIdx]; }
+function getIndices()    {
+  const v = getVersion();
+  // Map display label to VERSIONS key
+  const key = v === 'Version complète' ? 'Complète' : v;
+  return VERSIONS[key] || [];
+}
+
+// Kept for PDF compat
+function getRadioVal(grpId) {
+  if (grpId === 'grpCorrection') return getCorrection();
+  if (grpId === 'grpOeil')       return getOeil();
+  return getVersion();
+}
+
+function updateInfoGrid() {
+  // Recalcule si la vue résultat est active
+  if (document.getElementById('viewResult').classList.contains('active')) {
+    computeResults();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// BUILD
+// ═══════════════════════════════════════════════════════════
+function buildPlanches(){
+  const list=document.getElementById('planchesList');
+  list.innerHTML='';
+  const row=document.getElementById('dotsRow');
+  if(row) row.innerHTML=''; // force rebuild dots
+  getIndices().forEach(id=>{
+    const p=PLANCHES_DATA[id]; if(!p)return;
+    const card=document.createElement('div');
+    // Planche 1 et 38 = pleine largeur, les autres en grille 2 colonnes
+    card.className='planche-card' + (id===1||id===38?' full-width':'');
+    card.id=`card-${id}`;
+
+    // N° au-dessus
+    const num=document.createElement('div'); num.className='planche-num'; num.textContent=`N° ${id}`;
+    card.appendChild(num);
+
+    // ── LIGNE HAUTE : image | input | boutons ──
+    const top=document.createElement('div'); top.className='planche-top';
+
+    // Image seule (sans colonne)
+    const imgWrap=document.createElement('div'); imgWrap.className='planche-img-wrap';
+    const img=document.createElement('img'); img.src=`${id}.jpg`; img.alt=`Planche ${id}`;
+    img.onerror=()=>{ imgWrap.innerHTML='<div class="planche-img-placeholder">🎨</div>'; };
+    imgWrap.appendChild(img);
+    top.appendChild(imgWrap);
+
+    // Milieu : input ou affichage trajet
+    const mid=document.createElement('div'); mid.className='planche-mid';
+
+    if(p.type==='chiffre'){
+      const inp=document.createElement('input'); inp.type='text'; inp.className='answer-input';
+      inp.placeholder=''; inp.maxLength=8; inp.autocomplete='off';
+      // Restore display value
+      const storedVal=answers[id]||'';
+      inp.value = storedVal==='x' ? 'Non vu' : storedVal;
+      inp.id=`inp-${id}`;
+      inp.addEventListener('input',()=>{
+        let raw=inp.value.trim();
+        // Si l'utilisateur tape exactement "x", "X" ou "×" → transformer en "Non vu"
+        if(raw==='x'||raw==='X'||raw==='×'){
+          inp.value='Non vu';
+          answers[id]='x';
+        } else if(raw.toLowerCase()==='non vu'){
+          answers[id]='x';
+        } else {
+          answers[id]=raw;
+        }
+        styleChiffreInput(inp,id); updateProgress();
+      });
+      inp.addEventListener('keydown',e=>{
+        // Entrée / Tab = passer au champ chiffre suivant (saute les planches trajet)
+        // Shift+Tab = champ chiffre précédent
+        if(e.key==='Enter' || e.key==='Tab'){
+          const all = getIndices();
+          const step = e.shiftKey ? -1 : 1;
+          let targetId = null;
+          for(let i = all.indexOf(id) + step; i >= 0 && i < all.length; i += step){
+            if(PLANCHES_DATA[all[i]]?.type === 'chiffre'){ targetId = all[i]; break; }
+          }
+          if(targetId){
+            e.preventDefault();
+            advanceToNext(id, targetId);
+          }
+          // Sinon (plus de champ chiffre) : on laisse le navigateur gérer Tab normalement
+        }
+      });
+      const statusSpan=document.createElement('span'); statusSpan.className='status-icon'; statusSpan.id=`ico-${id}`;
+      mid.appendChild(inp); mid.appendChild(statusSpan);
+    } else {
+      const selDisp=document.createElement('div');
+      selDisp.id=`sel-${id}`; selDisp.className='trajet-sel';
+      const saved=answers[id]||[];
+      selDisp.textContent=saved.includes('Non vu')?'Non vu':saved.join(', ');
+      mid.appendChild(selDisp);
+    }
+    top.appendChild(mid);
+
+    // Droite : boutons Correct + Non vu côte à côte avec label dessous
+    const actions=document.createElement('div'); actions.className='planche-actions';
+
+    const wrapV=document.createElement('div'); wrapV.className='btn-wrap';
+    const btnV=document.createElement('button'); btnV.className='btn-valider'; btnV.title='Réponse normale';
+    btnV.innerHTML='✓';
+    btnV.addEventListener('click',()=>{
+      if(p.type==='chiffre') fillChiffre(id,p.normale);
+      else fillTrajetNormal(id);
+    });
+    const lblV=document.createElement('span'); lblV.textContent='Correct';
+    wrapV.appendChild(btnV); wrapV.appendChild(lblV);
+
+    const wrapX=document.createElement('div'); wrapX.className='btn-wrap';
+    const btnX=document.createElement('button'); btnX.className='btn-nonvu'; btnX.title='Non vu';
+    btnX.innerHTML='✕';
+    btnX.addEventListener('click',()=>{
+      if(p.type==='chiffre'){
+        const inp=document.querySelector(`#card-${id} .answer-input`);
+        if(inp){ inp.value='Non vu'; answers[id]='x'; styleChiffreInput(inp,id); updateProgress(); }
+      } else {
+        answers[id]=['Non vu'];
+        const selD=document.getElementById(`sel-${id}`);
+        if(selD) selD.textContent='Non vu';
+        card.querySelectorAll('.check-label').forEach(lbl=>lbl.classList.remove('checked'));
+        styleTrajetCard(id); updateProgress();
+      }
+      advanceToNext(id);
+    });
+    const lblX=document.createElement('span'); lblX.textContent='Non vu';
+    wrapX.appendChild(btnX); wrapX.appendChild(lblX);
+
+    actions.appendChild(wrapV); actions.appendChild(wrapX);
+    top.appendChild(actions);
+    card.appendChild(top);
+
+    // ── LIGNE BASSE : suggestions ──
+    const opts=document.createElement('div'); opts.className='planche-options';
+
+    if(p.type==='chiffre'){
+      const sugg=document.createElement('span'); sugg.className='suggestions-label'; sugg.textContent='Suggestions :';
+      opts.appendChild(sugg);
+      const allVals=[{val:p.normale,isN:true}];
+      [p.protG,p.protL,p.deutG,p.deutL].filter(v=>v).forEach(v=>{ if(!allVals.find(a=>a.val===v)) allVals.push({val:v,isN:false}); });
+      allVals.forEach(({val,isN})=>{
+        const ob=document.createElement('span');
+        ob.className='opt-badge'+(isN?' is-normal':'');
+        ob.textContent=val;
+        ob.addEventListener('click',()=>fillChiffre(id,val)); opts.appendChild(ob);
+      });
+    } else {
+      const sugg=document.createElement('span'); sugg.className='suggestions-label'; sugg.textContent='Options :';
+      opts.appendChild(sugg);
+      p.options.forEach(opt=>{
+        const lbl=document.createElement('label'); lbl.className='check-label';
+        lbl.dataset.label=opt.label;
+        const saved=answers[id]||[];
+        if(saved.includes(opt.label)) lbl.classList.add('checked');
+        lbl.addEventListener('click',()=>{
+          const wasChecked=lbl.classList.contains('checked');
+          opts.querySelectorAll('.check-label').forEach(l=>l.classList.remove('checked'));
+          if(!wasChecked) lbl.classList.add('checked');
+          saveTrajetAnswer(id);
+          const selD=document.getElementById(`sel-${id}`);
+          if(selD) selD.textContent=(answers[id]||[]).join(', ');
+          styleTrajetCard(id); updateProgress();
+          // Avance à la planche suivante seulement si une option est désormais cochée
+          if(!wasChecked) advanceToNext(id);
+        });
+        lbl.appendChild(document.createTextNode(opt.label)); opts.appendChild(lbl);
+      });
+    }
+
+    card.appendChild(opts);
+    list.appendChild(card);
+    if(p.type==='chiffre'){ const inp=card.querySelector('.answer-input'); if(inp)styleChiffreInput(inp,id); }
+    else { styleTrajetCard(id); }
+  });
+  updateProgress();
+}
+
+// ═══════════════════════════════════════════════════════════
+// FILL / STYLE
+// ═══════════════════════════════════════════════════════════
+function fillChiffre(id,value){
+  const inp=document.querySelector(`#card-${id} .answer-input`); if(!inp)return;
+  // Si la valeur est 'x', afficher 'Non vu' dans le champ mais stocker 'x'
+  if(value.toLowerCase()==='x'||value==='×'){
+    inp.value='Non vu'; inp.dataset.rawval='x'; answers[id]='x';
+  } else {
+    inp.value=value; delete inp.dataset.rawval; answers[id]=value;
+  }
+  styleChiffreInput(inp,id); updateProgress();
+  advanceToNext(id);
+}
+
+// Avance à la planche suivante avec règles :
+// 1. Scroll UNIQUEMENT quand les deux cartes de la ligne courante sont remplies
+//    (peu importe l'ordre de remplissage gauche/droite).
+// 2. Quand on scroll, on place la ligne qu'on vient de finir EN HAUT de l'écran
+//    → la ligne en cours de remplissage est juste en dessous, avec contexte visuel.
+// 3. Si la ligne n'est pas encore complète, on focus l'autre carte de la même ligne
+//    sans scroller.
+let _suspendAutoAdvance = false;
+function advanceToNext(currentId, explicitTargetId){
+  if (_suspendAutoAdvance) return;
+  const all         = getIndices();
+  const scroller    = document.querySelector('.scroll-area');
+  const currentCard = document.getElementById(`card-${currentId}`);
+  if (!scroller || !currentCard) return;
+
+  // Cartes sur la même ligne visuelle que currentCard (tolérance 5 px)
+  const currentTop = currentCard.getBoundingClientRect().top;
+  const rowIds = all.filter(id => {
+    const c = document.getElementById(`card-${id}`);
+    return c && Math.abs(c.getBoundingClientRect().top - currentTop) < 5;
+  });
+
+  // Une carte est considérée remplie si answers[id] contient quelque chose
+  const isFilled = (id) => {
+    const p = PLANCHES_DATA[id]; if (!p) return false;
+    if (p.type === 'chiffre') return !!(answers[id]||'').trim();
+    return (answers[id]||[]).length > 0;
+  };
+  const rowComplete = rowIds.every(isFilled);
+
+  // Calcul de la cible (sauf si fournie explicitement par Tab)
+  let targetId;
+  if (explicitTargetId != null) {
+    targetId = explicitTargetId;
+  } else if (!rowComplete) {
+    // Ligne pas finie → focus la carte non remplie de la ligne,
+    // ou à défaut, première carte de la ligne suivante
+    const unfilledInRow = rowIds.find(id => id !== currentId && !isFilled(id));
+    if (unfilledInRow) targetId = unfilledInRow;
+    else {
+      const lastRowIdx = Math.max(...rowIds.map(id => all.indexOf(id)));
+      targetId = all[lastRowIdx + 1];
+    }
+  } else {
+    // Ligne complète → première carte de la ligne suivante
+    const lastRowIdx = Math.max(...rowIds.map(id => all.indexOf(id)));
+    targetId = all[lastRowIdx + 1];
+  }
+  if (!targetId) return;
+  const targetCard = document.getElementById(`card-${targetId}`);
+  if (!targetCard) return;
+
+  // Décision du scroll :
+  //  - Tab/Enter explicite : on scrolle dès que la cible est hors de la zone visible
+  //  - Auto-advance : on scrolle quand la ligne courante est complète ET la cible
+  //    est sur une autre ligne
+  const targetTopRect = targetCard.getBoundingClientRect().top;
+  const targetSameRow = Math.abs(targetTopRect - currentTop) < 5;
+  const scrollerRect  = scroller.getBoundingClientRect();
+  const targetRect    = targetCard.getBoundingClientRect();
+  const margin        = 12;
+  const targetAbove   = targetRect.top    < scrollerRect.top    + margin;
+  const targetBelow   = targetRect.bottom > scrollerRect.bottom - margin;
+  const targetOutOfView = targetAbove || targetBelow;
+
+  let shouldScroll;
+  let scrollOffset = 0;
+
+  if (explicitTargetId != null) {
+    shouldScroll = targetOutOfView;
+    if (shouldScroll) {
+      if (targetAbove) {
+        // Cible au-dessus : la placer en haut avec un peu de respiration
+        scrollOffset = targetRect.top - scrollerRect.top - margin;
+      } else {
+        // Cible en dessous : la placer en bas avec un peu de respiration
+        scrollOffset = targetRect.bottom - scrollerRect.bottom + margin;
+      }
+    }
+  } else {
+    shouldScroll = rowComplete && !targetSameRow;
+    if (shouldScroll) {
+      // Auto-advance : ancre = carte la plus à gauche de la ligne JUSTE REMPLIE
+      const anchor = rowIds
+        .map(id => document.getElementById(`card-${id}`))
+        .filter(Boolean)
+        .sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left)[0]
+        || currentCard;
+      scrollOffset = anchor.getBoundingClientRect().top - scrollerRect.top - 8;
+    }
+  }
+
+  // Focus immédiat (avec preventScroll pour éviter un saut natif),
+  // puis scroll fluide pour amener la cible dans la zone visible
+  const nextInput = targetCard.querySelector('.answer-input');
+  if (nextInput && typeof nextInput.focus === 'function') {
+    try { nextInput.focus({ preventScroll: true }); }
+    catch(e) { nextInput.focus(); }
+  }
+
+  if (shouldScroll && scrollOffset !== 0) {
+    const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    const newTop = Math.min(maxTop, Math.max(0, scroller.scrollTop + scrollOffset));
+    requestAnimationFrame(() => {
+      try {
+        scroller.scrollTo({ top: newTop, behavior: 'smooth' });
+      } catch(e) {
+        scroller.scrollTop = newTop;
+      }
+    });
+  }
+}
+function saveTrajetAnswer(id){
+  const wrap=document.querySelector(`#card-${id} .planche-options`);
+  if(!wrap)return;
+  answers[id]=[...wrap.querySelectorAll('label.check-label.checked')].map(l=>l.dataset.label);
+  const selD=document.getElementById(`sel-${id}`);
+  if(selD) selD.textContent=(answers[id]||[]).join(', ');
+}
+function fillTrajetNormal(id){
+  const p=PLANCHES_DATA[id]; if(!p||p.type!=='trajet')return;
+  const cL=p.options.filter(o=>o.correct).map(o=>o.label); answers[id]=cL;
+  const wrap=document.querySelector(`#card-${id} .planche-options`);
+  if(wrap){ wrap.querySelectorAll('label.check-label').forEach(lbl=>{ lbl.classList.toggle('checked', cL.includes(lbl.dataset.label)); }); }
+  const selD=document.getElementById(`sel-${id}`);
+  if(selD) selD.textContent=cL.join(', ');
+  styleTrajetCard(id); updateProgress();
+  advanceToNext(id);
+}
+function clearTrajet(id){
+  answers[id]=[]; const wrap=document.querySelector(`#card-${id} .planche-options`);
+  if(wrap){ wrap.querySelectorAll('label.check-label').forEach(lbl=>lbl.classList.remove('checked')); }
+  styleTrajetCard(id); updateProgress();
+}
+// Remplit toutes les planches de la version courante avec la réponse d'un sujet normal
+function fillAllNormal(){
+  _suspendAutoAdvance = true;
+  try {
+    getIndices().forEach(id=>{
+      const p=PLANCHES_DATA[id]; if(!p) return;
+      if(p.type==='chiffre') fillChiffre(id, p.normale);
+      else fillTrajetNormal(id);
+    });
+  } finally {
+    _suspendAutoAdvance = false;
+  }
+}
+// Classification d'une réponse chiffre en sous-type
+function classifyChiffreAnswer(id, rawVal) {
+  const p=PLANCHES_DATA[id]; if(!p||p.type!=='chiffre')return null;
+  const raw=(rawVal||'').trim(); if(!raw)return null;
+  const val=raw.toLowerCase();
+  // x = ne voit rien
+  if(val==='x'||val==='×'){
+    const n=p.normale.toLowerCase();
+    if(n==='x'||n==='×') return 'normale';
+    // Si une colonne dyschro a 'x' comme référence (ex. planches 10-17),
+    // alors un patient qui ne voit rien correspond au pattern dyschromat
+    const isX = v => { const s=(v||'').toLowerCase(); return s==='x'||s==='×'; };
+    if(isX(p.protG)||isX(p.protL)||isX(p.deutG)||isX(p.deutL)) return 'dyschro';
+    return 'autre';
+  }
+  // Normale en PREMIER
+  if(val===p.normale.toLowerCase()) return 'normale';
+  // Pour protL/deutL : les valeurs contiennent des parenthèses ex "(3)5"
+  // La saisie "35" ne doit PAS matcher "(3)5" si "(3)5" nettoyé donne "35" qui est aussi la normale
+  // On compare donc la saisie avec la valeur AVEC parenthèses (telle quelle, sans nettoyage)
+  // Si saisie = "35" et protL = "(3)5" → clean("(3)5") = "35" → MAIS normale est aussi "35" → déjà retourné 'normale' ci-dessus
+  // Si saisie = "5" et protG = "5" → match direct
+  const clean=v=>(v||'').replace(/[()]/g,'').toLowerCase();
+  // protG et deutG : valeurs sans parenthèses → comparaison directe
+  if(p.protG && val===p.protG.toLowerCase()) return 'protG';
+  if(p.deutG && val===p.deutG.toLowerCase()) return 'deutG';
+  // protL et deutL : peuvent avoir des parenthèses → nettoyer pour comparer, MAIS seulement si ≠ normale
+  if(p.protL){
+    const cv=clean(p.protL);
+    if(cv!==p.normale.toLowerCase() && val===cv) return 'protL';
+    // Aussi accepter la saisie avec parenthèses si l'orthoptiste les tape
+    if(val===p.protL.toLowerCase()) return 'protL';
+  }
+  if(p.deutL){
+    const cv=clean(p.deutL);
+    if(cv!==p.normale.toLowerCase() && val===cv) return 'deutL';
+    if(val===p.deutL.toLowerCase()) return 'deutL';
+  }
+  return 'autre';
+}
+function isAltAccepted(id,val){
+  const cat=classifyChiffreAnswer(id,val);
+  return cat!==null && cat!=='autre';
+}
+function styleChiffreInput(inp,id){
+  // Utiliser la valeur interne (answers[id]) pour la classification, pas la valeur affichée ('Non vu')
+  const raw=(answers[id]||'').trim();
+  const displayed=inp.value.trim();
+  const ico=document.getElementById(`ico-${id}`); const card=document.getElementById(`card-${id}`);
+  if(!card)return;
+  inp.classList.remove('correct','wrong'); if(ico)ico.textContent='';
+  if(!raw&&!displayed){ card.classList.remove('answered','error-card'); return; }
+  const cat=classifyChiffreAnswer(id,raw||displayed.toLowerCase());
+  if(cat==='normale'){
+    inp.classList.add('correct');
+    card.classList.add('answered'); card.classList.remove('error-card');
+  } else if(cat&&cat!=='autre'){
+    inp.classList.add('wrong');
+    card.classList.add('error-card'); card.classList.remove('answered');
+  } else {
+    inp.classList.add('wrong');
+    card.classList.add('error-card'); card.classList.remove('answered');
+  }
+}
+function styleTrajetCard(id){
+  const p=PLANCHES_DATA[id]; if(!p||p.type!=='trajet')return;
+  const arr=answers[id]||[]; const card=document.getElementById(`card-${id}`); if(!card)return;
+  const selD=document.getElementById(`sel-${id}`);
+  if(!arr.length){
+    card.classList.remove('answered','error-card');
+    if(selD){ selD.classList.remove('answered','wrong'); }
+    return;
+  }
+  if(arr.includes('Non vu')){
+    card.classList.add('error-card'); card.classList.remove('answered');
+    if(selD){ selD.classList.add('wrong'); selD.classList.remove('answered'); }
+    return;
+  }
+  const cL=p.options.filter(o=>o.correct).map(o=>o.label);
+  const ok=cL.every(l=>arr.includes(l))&&arr.every(l=>cL.includes(l));
+  card.classList.toggle('answered',ok); card.classList.toggle('error-card',!ok);
+  if(selD){ selD.classList.toggle('answered',ok); selD.classList.toggle('wrong',!ok); }
+}
+function isAnswerCorrect(id) {
+  const p = PLANCHES_DATA[id]; if (!p) return null;
+  if(p.type === 'chiffre') {
+    const raw = (answers[id]||'').trim(); if (!raw) return null;
+    const cat = classifyChiffreAnswer(id, raw);
+    if(!cat||cat==='autre') return false;
+    return cat==='normale';
+  } else {
+    const arr = answers[id]||[]; if (!arr.length) return null;
+    const cL = p.options.filter(o=>o.correct).map(o=>o.label);
+    return cL.every(l=>arr.includes(l)) && arr.every(l=>cL.includes(l));
+  }
+}
+
+function goToPlanche(id) {
+  // Switch to saisie view if needed
+  const vr = document.getElementById('viewResult');
+  if (vr.classList.contains('active')) {
+    switchView('planches', document.getElementById('tabSaisie'));
+  }
+  // Scroll to card and focus input
+  setTimeout(() => {
+    const card = document.getElementById(`card-${id}`);
+    const sa = document.querySelector('.scroll-area');
+    if (card && sa) {
+      // Scroll card into view within scroll-area
+      const cardTop = card.offsetTop - sa.offsetTop;
+      sa.scrollTo({ top: cardTop - 16, behavior: 'smooth' });
+    }
+    // Focus the input or first check-label
+    const inp = document.querySelector(`#card-${id} .answer-input`);
+    if (inp) { inp.focus(); inp.select(); return; }
+    const lbl = document.querySelector(`#card-${id} .check-label`);
+    if (lbl) lbl.focus();
+  }, 100);
+}
+
+function updateProgress() {
+  const indices = getIndices();
+  const row = document.getElementById('dotsRow');
+  if (!row) return;
+
+  const n = indices.length;
+  const DOT_SIZE = 12;
+  const GAP = 4;
+  row.style.gap = GAP + 'px';
+
+  // Rebuild only if count changed
+  if (row.children.length !== n) {
+    row.innerHTML = '';
+    indices.forEach(id => {
+      const d = document.createElement('div');
+      d.className = 'dot-circle';
+      d.id = `dot-${id}`;
+      d.dataset.num = id;
+      d.style.width = DOT_SIZE + 'px';
+      d.style.height = DOT_SIZE + 'px';
+      d.style.cursor = 'pointer';
+      d.addEventListener('click', () => goToPlanche(id));
+      row.appendChild(d);
+    });
+  }
+
+  let filled = 0;
+  indices.forEach(id => {
+    const p = PLANCHES_DATA[id]; if (!p) return;
+    const d = document.getElementById(`dot-${id}`);
+    if (!d) return;
+
+    let answered = false;
+    if (p.type === 'chiffre') {
+      const val = (answers[id]||'').trim();
+      answered = val.length > 0;
+    } else {
+      answered = (answers[id]||[]).length > 0;
+    }
+    if (answered) filled++;
+
+    const result = isAnswerCorrect(id);
+    // x/X = patient ne voit rien → compte comme rempli, rouge si pas normale
+    d.className = 'dot-circle' + (result === true ? ' ok' : answered ? ' err' : '');
+  });
+
+  const total = indices.length;
+  const pct = total ? Math.round(filled / total * 100) : 0;
+  const lbl = document.getElementById('progLbl');
+  const pctEl = document.getElementById('progPct');
+  if (lbl) lbl.textContent = filled + ' / ' + total;
+  if (pctEl) pctEl.textContent = pct + '%';
+}
+
+// ═══════════════════════════════════════════════════════════
+// VIEWS
+// ═══════════════════════════════════════════════════════════
+function switchView(view, tabBtn){
+  document.getElementById('tabSaisie').classList.remove('active');
+  document.getElementById('tabResultats').classList.remove('active');
+  if (tabBtn && (tabBtn.id === 'tabSaisie' || tabBtn.id === 'tabResultats')) {
+    tabBtn.classList.add('active');
+  }
+
+  const vp = document.getElementById('viewPlanches');
+  const vr = document.getElementById('viewResult');
+  const sa = document.querySelector('.scroll-area');
+  const prog = document.getElementById('progressSection');
+  const stickySaisie = document.getElementById('stickySaisie');
+  const conditionsWrap = document.getElementById('conditionsWrap');
+
+  if (view === 'result') {
+    vp.style.display = 'none';
+    vr.classList.add('active');
+    if (prog) prog.style.display = 'none';
+    if (stickySaisie) stickySaisie.style.display = 'none';
+    if (conditionsWrap) conditionsWrap.style.display = 'none';
+    if (sa) sa.scrollTop = 0;
+    computeResults();
+  } else {
+    vp.style.display = 'block';
+    vr.classList.remove('active');
+    if (prog) prog.style.display = 'block';
+    if (stickySaisie) stickySaisie.style.display = 'block';
+    if (conditionsWrap) conditionsWrap.style.display = 'block';
+    if (sa) sa.scrollTop = 0;
+  }
+}
+function showResults(){ switchView('result', document.getElementById('tabResultats')); }
+function resetAll(){
+  document.getElementById('resetModal').classList.add('open');
+}
+function closeResetModal(){ document.getElementById('resetModal').classList.remove('open'); }
+function confirmReset(){
+  closeResetModal();
+  answers={};
+  versionIdx=0; correctionIdx=0; oeilIdx=0;
+  document.getElementById('btnVersion').textContent=VERSION_CYCLE[0];
+  document.getElementById('btnCorrection').textContent=CORRECTION_CYCLE[0];
+  document.getElementById('btnOeil').textContent=OEIL_CYCLE[0];
+  document.getElementById('dateExamen').value=new Date().toISOString().slice(0,10);
+  buildPlanches();
+  switchView('planches', document.getElementById('tabSaisie'));
+  showToast('Réinitialisé');
+}
+
+// ═══════════════════════════════════════════════════════════
+// DIAGNOSIS
+// ═══════════════════════════════════════════════════════════
+function diagnosePlanche26_27(id){
+  const arr=answers[id]||[];
+  const hR=arr.includes('Rouge'),hRF=arr.includes('Rouge faible'),hP=arr.includes('Pourpre'),hPF=arr.includes('Pourpre faible');
+  if(hR&&hP&&!hRF&&!hPF)return null;
+  if(hRF&&hP)return 'protanomalie'; if(hRF&&!hP)return 'protanopie';
+  if(hR&&hPF)return 'deuteranomalie'; if(!hR&&hPF)return 'deuteranopie';
+  return null;
+}
+
+function computeResults(){
+  try {
+  const indices=getIndices(), total=indices.length;
+  // Planches neutres (ne comptent pas pour normal/dys mais incohérence si non vu)
+  const NEUTRES=new Set([1,38]);
+  // Planches avec sous-types Protan/Deutan
+  const SOUS_TYPES=new Set([22,23,24,25,26,27]);
+
+  let correct=0, incorrect=[], answered=0;
+  let cDysRV=0; // dyschromatopsie R/V générale
+  let cProtG=0,cProtL=0,cDeutG=0,cDeutL=0;
+  let cIncoh=0; // réponses non cohérentes (planches 1/38 non vues, ou réponse hors référence)
+
+  indices.forEach(id=>{
+    const p=PLANCHES_DATA[id]; if(!p)return;
+    const isEmpty = p.type==='chiffre' ? !(answers[id]||'').trim() : !(answers[id]||[]).length;
+    if(isEmpty) return; // Non répondu : exclu
+    answered++;
+    let ok=false;
+
+    if(p.type==='chiffre'){
+      const raw=(answers[id]||'').trim();
+      const cat=classifyChiffreAnswer(id,raw);
+      if(NEUTRES.has(id)){
+        // Planches 1 & 38 : comptent dans score global
+        // Toute réponse reconnue (normale ou dyschro) = correct
+        // "Non vu" (x) = incorrect → faux négatif
+        const isKnown=(cat&&cat!=='autre');
+        ok=isKnown;
+        if(!isKnown) cIncoh++; // faux négatif
+        // Ne contribuent PAS à cDysRV
+      } else {
+        ok=(cat==='normale');
+        if(!ok){
+          cDysRV++;
+          if(SOUS_TYPES.has(id)){
+            if(cat==='protG')cProtG++;
+            else if(cat==='protL')cProtL++;
+            else if(cat==='deutG')cDeutG++;
+            else if(cat==='deutL')cDeutL++;
+          }
+        }
+      }
+    } else {
+      const arr=answers[id]||[]; const cL=p.options.filter(o=>o.correct).map(o=>o.label);
+      // Planche 38 est un trajet NEUTRE
+      if(NEUTRES.has(id)){
+        ok=arr.length>0&&cL.every(l=>arr.includes(l))&&arr.every(l=>cL.includes(l));
+        if(!ok && arr.length>0) cIncoh++; // faux négatif planche 38
+      } else {
+        ok=arr.length>0&&cL.every(l=>arr.includes(l))&&arr.every(l=>cL.includes(l));
+        if(!ok && arr.length>0){
+          cDysRV++;
+          if(SOUS_TYPES.has(id)){
+            const tag=p.options.find(o=>arr.includes(o.label)&&!o.correct)?.tag||'';
+            if(tag==='protG')cProtG++; else if(tag==='protL')cProtL++;
+            else if(tag==='deutG')cDeutG++; else if(tag==='deutL')cDeutL++;
+          }
+        }
+      }
+    }
+    if(ok)correct++; else incorrect.push(id);
+  });
+  const tauxErreur=answered?((answered-correct)/answered*100):0;
+
+  // Achromatopsie : planches chiffres (sauf 1/38) où le patient tape x (non vu), pas non répondu
+  const chIdxStat=indices.filter(id=>PLANCHES_DATA[id]?.type==='chiffre'&&!NEUTRES.has(id));
+  const pAchro=chIdxStat.length>0&&chIdxStat.every(id=>{
+    const v=(answers[id]||'').trim();
+    return v.toLowerCase()==='x'; // seulement "non vu" explicite, pas vide
+  })?100:0;
+
+  const pNormal=answered?(correct/answered*100):0;
+  const pDysRV=answered?(cDysRV/answered*100):0;
+  const totalDysSub=cProtG+cProtL+cDeutG+cDeutL||1;
+  const cProt=cProtG+cProtL, cDeut=cDeutG+cDeutL;
+  const totalAnswered=answered||1;
+  const pProt=Math.round(cProt/totalAnswered*100);
+  const pDeut=Math.round(cDeut/totalAnswered*100);
+  const pProtGp=Math.round(cProtG/totalAnswered*100);
+  const pProtLp=Math.round(cProtL/totalAnswered*100);
+  const pDeutGp=Math.round(cDeutG/totalAnswered*100);
+  const pDeutLp=Math.round(cDeutL/totalAnswered*100);
+  const pIncoh=indices.some(id=>NEUTRES.has(id)) ? Math.round(cIncoh/2*100) : 0;
+
+  let vClass='verdict-ok', vText='';
+  if(answered===0){ vClass='verdict-ok'; vText=''; }
+  else if(pAchro===100){ vClass='verdict-achro'; vText='⚠ Suspicion d\'achromatopsie totale.'; }
+  else if(tauxErreur===0){ vClass='verdict-ok'; vText='Test normal - Aucune dyschromatopsie détectée.'; }
+  else if(tauxErreur<=20){ vClass='verdict-dys'; vText='⚠ Légères anomalies - À corréler cliniquement.'; }
+  else { vClass='verdict-dys'; vText='Suspicion de dyschromatopsie - À corréler cliniquement.'; }
+
+  document.getElementById('resTauxErr').textContent=tauxErreur.toFixed(1)+'%';
+  document.getElementById('resTauxErr').style.color=tauxErreur===0?'#22543d':'#c05621';
+  document.getElementById('resCorrect').textContent=correct+'/'+answered;
+  document.getElementById('resCorrect').style.color=tauxErreur===0?'#22543d':'#2c5282';
+  document.getElementById('resErrors').textContent=incorrect.length+'/'+answered;
+  document.getElementById('resErrors').style.color=incorrect.length===0?'#22543d':'#c05621';
+  const verd=document.getElementById('resVerdict'); verd.className='score-verdict '+vClass; verd.textContent=vText; verd.style.display = vText ? '' : 'none';
+
+  const dateEx=document.getElementById('dateExamen').value||new Date().toISOString().slice(0,10);
+
+  // ── Histogramme ──
+  // Barres longues : Vision normale, Dyschromatopsie R/V, Achromatopsie
+  // Barres courtes (max 60%) : sous-types Protan/Deutan (% parmi leur groupe)
+  const maxP=Math.max(pNormal,pDysRV,pAchro);
+  const hw=document.getElementById('histoWrap'); hw.innerHTML='';
+
+  // % Protan/Deutan calculés DANS leur groupe respectif
+  const totalProt=cProtG+cProtL||1, totalDeut=cDeutG+cDeutL||1;
+  const pProtGin=Math.round(cProtG/totalProt*100);
+  const pProtLin=Math.round(cProtL/totalProt*100);
+  const pDeutGin=Math.round(cDeutG/totalDeut*100);
+  const pDeutLin=Math.round(cDeutL/totalDeut*100);
+
+  function addHisLine(lbl, pct, indent, highlight){
+    const rowEl=document.createElement('div'); rowEl.className='histo-line';
+    if(indent){
+      rowEl.innerHTML=`<div class="histo-lbl indent">${lbl}</div><div class="histo-bar-bg short"><div class="histo-bar-fill sub" style="width:${Math.min(pct,100)}%"></div></div><div class="histo-pct sub">${pct.toFixed(0)}%</div>`;
+    } else {
+      rowEl.innerHTML=`<div class="histo-lbl">${lbl}</div><div class="histo-bar-bg"><div class="histo-bar-fill${highlight?' highlight':''}" style="width:${Math.min(pct,100)}%"></div></div><div class="histo-pct">${pct.toFixed(0)}%</div>`;
+    }
+    hw.appendChild(rowEl);
+  }
+
+  addHisLine('Vision normale', pNormal, false, pNormal===maxP);
+  addHisLine('Dyschromatopsie Rouge / Vert', pDysRV, false, pDysRV===maxP);
+
+  // Sous-catégories Protan / Deutan : affichées si pDysRV > 0 ET au moins
+  // une planche 22-27 a été remplie. Forme (grave / légère) affichée
+  // uniquement si au moins une planche 22-25 est remplie.
+  const SOUS_TYPES_PLATES = [22,23,24,25,26,27];
+  const SEVERITY_PLATES   = [22,23,24,25];
+  const isPlateFilled = (id) => {
+    const p = PLANCHES_DATA[id]; if (!p) return false;
+    if (p.type === 'chiffre') return !!(answers[id]||'').trim();
+    return (answers[id]||[]).length > 0;
+  };
+  const sousTypesFilled = SOUS_TYPES_PLATES.some(isPlateFilled);
+  const severityFilled  = SEVERITY_PLATES.some(isPlateFilled);
+
+  if(pDysRV > 0 && sousTypesFilled){
+    const totalProtDeut = cProtG+cProtL+cDeutG+cDeutL || 1;
+    const pProtTot = Math.round((cProtG+cProtL)/totalProtDeut*100);
+    const pDeutTot = 100 - pProtTot;
+    const pProtGrel = Math.round(cProtG/(cProtG+cProtL||1)*100);
+    const pProtLrel = Math.round(cProtL/(cProtG+cProtL||1)*100);
+    const pDeutGrel = Math.round(cDeutG/(cDeutG+cDeutL||1)*100);
+    const pDeutLrel = Math.round(cDeutL/(cDeutG+cDeutL||1)*100);
+
+    const hasSubData = (cProtG+cProtL+cDeutG+cDeutL) > 0;
+
+    // Annotation de forme : « (forme grave X %) » avec le % de la forme dominante.
+    // Si les deux formes sont à égalité, on n'affiche rien (ni annotation ni sous-lignes).
+    const formatForm = (cG, cL) => {
+      if (!severityFilled) return '';
+      const tot = cG + cL;
+      if (tot === 0) return '';
+      if (cG > cL) return ` (forme grave ${Math.round(cG/tot*100)}%)`;
+      if (cL > cG) return ` (forme légère ${Math.round(cL/tot*100)}%)`;
+      return '';
+    };
+
+    if(hasSubData){
+      addHisLine(`↳ Protan${formatForm(cProtG, cProtL)}`, pProtTot, true, false);
+      if(cProtG>0 && cProtL>0 && cProtG!==cProtL){
+        addHisLine('&nbsp;&nbsp;&nbsp;• grave', pProtGrel, true, false);
+        addHisLine('&nbsp;&nbsp;&nbsp;• léger', pProtLrel, true, false);
+      }
+      addHisLine(`↳ Deutan${formatForm(cDeutG, cDeutL)}`, pDeutTot, true, false);
+      if(cDeutG>0 && cDeutL>0 && cDeutG!==cDeutL){
+        addHisLine('&nbsp;&nbsp;&nbsp;• grave', pDeutGrel, true, false);
+        addHisLine('&nbsp;&nbsp;&nbsp;• léger', pDeutLrel, true, false);
+      }
+    } else {
+      // 22-27 remplies mais aucune réponse Protan/Deutan détectée
+      addHisLine('↳ Protan', 0, true, false);
+      addHisLine('↳ Deutan', 0, true, false);
+    }
+  }
+  addHisLine('Achromatopsie totale', pAchro, false, pAchro===maxP);
+
+  // Faux négatif — basé sur les planches 1 & 38 effectivement TESTÉES
+  const neutresInVersion = indices.filter(id => NEUTRES.has(id));
+  const isNeutreTested = (id) => {
+    const p = PLANCHES_DATA[id]; if (!p) return false;
+    if (p.type === 'chiffre') return !!(answers[id]||'').trim();
+    return (answers[id]||[]).length > 0;
+  };
+  const neutresTested = neutresInVersion.filter(isNeutreTested).length;
+  if(neutresInVersion.length > 0){
+    const fnEl=document.createElement('div');
+    fnEl.style.cssText='margin-top:12px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;gap:8px;font-size:12px;color:#4a5568;';
+    if(neutresTested === 0){
+      // Aucune des planches 1/38 n'a été testée
+      fnEl.innerHTML = `<span style="color:#718096;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Faux négatifs</span><span style="color:#a0aec0;font-size:11px;">Planches 1 et 38 non testées</span>`;
+    } else {
+      const fxNeg = cIncoh;
+      const fnColor = fxNeg===0?'#22543d':fxNeg===1?'#c05621':'#c53030';
+      const fiab = fxNeg===0 ? 'Examen fiable' : (fxNeg===neutresTested ? 'Fiabilité du test compromise' : 'Fiabilité réduite');
+      fnEl.innerHTML = `<span style="color:#718096;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Faux négatif</span><span style="font-weight:700;color:${fnColor};font-size:14px;">${fxNeg}/${neutresTested}</span><span style="color:#a0aec0;font-size:11px;">${fiab}</span>`;
+    }
+    hw.appendChild(fnEl);
+  }
+
+  // ── Tableau détail allégé ──
+  const tbody=document.getElementById('detailBody'); tbody.innerHTML='';
+  indices.forEach(id=>{
+    const p=PLANCHES_DATA[id]; if(!p)return;
+    let paDisplay='', cat='', isEmpty=false;
+    if(p.type==='chiffre'){
+      const raw=(answers[id]||'').trim();
+      if(!raw){ isEmpty=true; }
+      else if(raw.toLowerCase()==='x'){ cat=classifyChiffreAnswer(id,raw); paDisplay='Non vu'; }
+      else { cat=classifyChiffreAnswer(id,raw); paDisplay=raw; }
+    } else {
+      const arr=answers[id]||[];
+      if(!arr.length){ isEmpty=true; }
+      else if(arr.includes('Non vu')){ cat='nonvu'; paDisplay='Non vu'; }
+      else {
+        paDisplay=arr.join(', ');
+        const cL=p.options.filter(o=>o.correct).map(o=>o.label);
+        const isNormal=cL.every(l=>arr.includes(l))&&arr.every(l=>cL.includes(l));
+        if(isNormal){ cat='normale'; }
+        else {
+          // Détecter le sous-type via le tag de l'option sélectionnée
+          const selOpt=p.options.find(o=>arr.includes(o.label)&&!o.correct);
+          if(selOpt?.tag==='protG') cat='protG';
+          else if(selOpt?.tag==='protL') cat='protL';
+          else if(selOpt?.tag==='deutG') cat='deutG';
+          else if(selOpt?.tag==='deutL') cat='deutL';
+          else cat='dysTrajet';
+        }
+      }
+    }
+
+    // Afficher 'x' (ne voit rien) comme "Non vu" dans le tableau détail, idem qu'en saisie
+    const fmtX = v => (v && v.toString().toLowerCase()==='x') ? 'Non vu' : (v||'');
+    let rNorm, rPG, rPL, rDG, rDL;
+    if(p.type==='chiffre'){
+      rNorm=fmtX(p.normale); rPG=fmtX(p.protG); rPL=fmtX(p.protL); rDG=fmtX(p.deutG); rDL=fmtX(p.deutL);
+    } else {
+      rNorm=p.options.filter(o=>o.correct).map(o=>o.label).join(', ');
+      const protOpts=p.options.filter(o=>o.tag==='protG'||o.tag==='protL').map(o=>o.label).join(', ');
+      const deutOpts=p.options.filter(o=>o.tag==='deutG'||o.tag==='deutL').map(o=>o.label).join(', ');
+      const dysOpts=p.options.filter(o=>o.tag==='dyschro').map(o=>o.label).join(', ');
+      rPG=protOpts||dysOpts; rPL=''; rDG=deutOpts||dysOpts; rDL='';
+    }
+
+    const normClass=(!isEmpty&&cat==='normale')?'cell-ok':'';
+    let patStyle='';
+    if(isEmpty) patStyle='color:#a0aec0;font-style:italic;font-size:11px';
+    else if(cat==='autre'||cat===null) patStyle='color:#e53e3e;font-weight:600';
+    else if(cat==='normale') patStyle='color:#22543d;font-weight:600';
+    else patStyle='font-weight:600;color:#c05621';
+
+    const tr=document.createElement('tr');
+    const numCell=`<td style="font-weight:700">${id}${NEUTRES.has(id)?'<sup style="color:#a0aec0;font-size:8px">*</sup>':''}</td>`;
+    const patCell=`<td style="${patStyle}">${isEmpty?'Non répondu':paDisplay}</td>`;
+
+    // Planches 1 et 38 : même réponse pour tout le monde → fusionner les 5 colonnes
+    if(NEUTRES.has(id)){
+      const uniVal = rNorm || (p.type==='trajet' ? p.options.find(o=>o.correct)?.label : '');
+      const cls = (!isEmpty&&cat==='normale')?'cell-ok':(!isEmpty&&cat!=='normale'&&cat!=='autre')?'cell-err':'';
+      tr.innerHTML=`${numCell}${patCell}<td colspan="5" class="${cls}" style="text-align:center">${uniVal}</td>`;
+    // Planches 1-21 (hors neutres) : dyschro identique → fusionner 4 cols
+    } else if(id >= 1 && id <= 21){
+      const dysVal = rPG || rDG || '';
+      const dyCls = (!isEmpty && cat !== 'normale' && cat !== 'autre' && cat !== null) ? 'cell-err' : '';
+      const normCls = (!isEmpty && cat === 'normale') ? 'cell-ok' : '';
+      tr.innerHTML=`${numCell}${patCell}<td class="${normCls}">${rNorm}</td><td colspan="4" class="${dyCls}" style="text-align:center">${dysVal}</td>`;
+    // Planches 28-37 : dyschro identique pour protan et deutan → fusionner 4 cols
+    } else if(id >= 28 && id <= 37){
+      const dysVal = rPG || rDG || '';
+      const dyCls = (!isEmpty && cat !== 'normale' && cat !== 'autre' && cat !== null) ? 'cell-err' : '';
+      const normCls = (!isEmpty && cat === 'normale') ? 'cell-ok' : '';
+      tr.innerHTML=`${numCell}${patCell}<td class="${normCls}">${rNorm}</td><td colspan="4" class="${dyCls}" style="text-align:center">${dysVal}</td>`;
+    } else {
+      // Planches 22-27
+      const hPG=cat==='protG'?'cell-err':'', hPL=cat==='protL'?'cell-err':'';
+      const hDG=cat==='deutG'?'cell-err':'', hDL=cat==='deutL'?'cell-err':'';
+      const normClass=(!isEmpty&&cat==='normale')?'cell-ok':'';
+
+      if(p.type==='trajet' && cat==='protG'){
+        // Tracé protan (grave = léger pour les trajets) → colspan 2 Protan, colonnes Deutan vides
+        tr.innerHTML=`${numCell}${patCell}<td class="${normClass}">${rNorm}</td><td colspan="2" class="cell-err" style="text-align:center">${rPG}</td><td></td><td></td>`;
+      } else if(p.type==='trajet' && cat==='deutG'){
+        // Tracé deutan → colonnes Protan vides, colspan 2 Deutan
+        tr.innerHTML=`${numCell}${patCell}<td class="${normClass}">${rNorm}</td><td></td><td></td><td colspan="2" class="cell-err" style="text-align:center">${rDG}</td>`;
+      } else {
+        const allVals=[rNorm,rPG,rPL,rDG,rDL].filter(v=>v);
+        const allUnique=[...new Set(allVals)];
+        if(allUnique.length===1){
+          const cls=(!isEmpty&&cat==='normale')?'cell-ok':(!isEmpty&&cat!=='autre'&&cat)?'cell-err':'';
+          tr.innerHTML=`${numCell}${patCell}<td colspan="5" class="${cls}" style="text-align:center">${allUnique[0]}</td>`;
+        } else {
+          tr.innerHTML=`${numCell}${patCell}<td class="${normClass}">${rNorm}</td><td class="${hPG}">${rPG}</td><td class="${hPL}">${rPL}</td><td class="${hDG}">${rDG}</td><td class="${hDL}">${rDL}</td>`;
+        }
+      }
+    }
+    tbody.appendChild(tr);
+  });
+
+  window._lastResults={tauxErreur,correct,answered,total,vText,pNormal,pDysRV,pProt,pDeut,pProtGp,pProtLp,pDeutGp,pDeutLp,pAchro,pIncoh,cIncoh,cProtG,cProtL,cDeutG,cDeutL,indices};
+  } catch(e) { console.error('computeResults error:', e); showToast('Erreur: '+e.message); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PDF
+// ═══════════════════════════════════════════════════════════
+function openPdfModal(){
+  // Pré-remplir avec le dernier patient connu
+  const lp=window._lastPatient||{};
+  document.getElementById('pdfNom').value=lp.nom||'';
+  document.getElementById('pdfPrenom').value=lp.prenom||'';
+  document.getElementById('pdfModal').classList.add('open');
+  document.getElementById('pdfNom').focus();
+}
+function closePdfModal(){ document.getElementById('pdfModal').classList.remove('open'); }
+
+function generatePDF(){
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  // Forcer le calcul des résultats si pas encore fait
+  if(!window._lastResults){ computeResults(); }
+  const r=window._lastResults; if(!r){ showToast('Veuillez d\'abord consulter les Résultats'); return; }
+
+  const nom=(document.getElementById('pdfNom').value.trim()||'').toUpperCase();
+  const prenom=document.getElementById('pdfPrenom').value.trim()||'';
+  const nomC=[nom,prenom].filter(Boolean).join(' ')||'—';
+  const nomF=[nom,prenom].filter(Boolean).join('_')||'Ishihara';
+  const dateEx=document.getElementById('dateExamen').value||new Date().toISOString().slice(0,10);
+  const dateF=dateEx.split('-').reverse().join('/');
+  const today=new Date().toLocaleDateString('fr-FR');
+  const ver=getVersion(); const corr=getCorrection(); const oeil=getOeil();
+  const W=210,ml=20,mr=20,cW=W-ml-mr; let y=0;
+
+  // ── COULEURS ──
+  const C={
+    navy:[30,55,100], blue:[60,100,160], lightBlue:[235,242,250],
+    green:[34,103,73], lightGreen:[198,240,213],
+    red:[160,30,30], lightRed:[250,210,210],
+    gray:[90,90,90], lightGray:[245,247,250], midGray:[180,185,195],
+    white:[255,255,255], black:[20,20,20]
+  };
+  const rgb=(c)=>c; // shorthand
+
+  // ── ENTÊTE ──
+  doc.setFillColor(...C.navy); doc.rect(0,0,W,22,'F');
+  doc.setFillColor(...C.blue); doc.rect(0,22,W,8,'F');
+
+  doc.setTextColor(...C.white);
+  doc.setFont('helvetica','bold'); doc.setFontSize(13);
+  doc.text("TEST D'ISHIHARA — RAPPORT DE BILAN", ml, 14);
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
+  doc.text(`Version : ${ver}  |  ${corr}  |  ${oeil}`, ml, 27);
+  doc.text(`Date d'examen : ${dateF}`, W-mr, 27, {align:'right'});
+  y = 36;
+
+  // ── BLOC PATIENT + SCORE ──
+  // Bloc patient gauche
+  doc.setFillColor(...C.lightGray); doc.roundedRect(ml,y,cW*0.55-4,20,1,1,'F');
+  doc.setTextColor(...C.gray); doc.setFont('helvetica','normal'); doc.setFontSize(7);
+  doc.text('PATIENT', ml+4, y+6);
+  doc.setTextColor(...C.black); doc.setFont('helvetica','bold'); doc.setFontSize(10);
+  doc.text(nomC||'Non renseigné', ml+4, y+13);
+
+  // Bloc score droite
+  const sx=ml+cW*0.55, sw=cW*0.45;
+  const taux=r.tauxErreur;
+  const scoreColor=taux===0?C.green:taux<30?[160,100,20]:C.red;
+  doc.setFillColor(...C.lightGray); doc.roundedRect(sx,y,sw,20,1,1,'F');
+  doc.setDrawColor(...scoreColor); doc.setLineWidth(0.5);
+  doc.roundedRect(sx,y,sw,20,1,1,'S');
+  doc.setTextColor(...C.gray); doc.setFont('helvetica','normal'); doc.setFontSize(7);
+  doc.text('TAUX D\'ERREUR', sx+4, y+6);
+  doc.setTextColor(...scoreColor); doc.setFont('helvetica','bold'); doc.setFontSize(14);
+  doc.text(taux.toFixed(1)+'%', sx+sw-6, y+14, {align:'right'});
+  doc.setTextColor(...C.gray); doc.setFont('helvetica','normal'); doc.setFontSize(7);
+  doc.text(`${r.correct}/${r.answered} réponses correctes`, sx+4, y+16);
+  y+=26;
+
+  // Ligne verdict
+  doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(...C.gray);
+  const verdictClean=(r.vText||'').replace(/[✅⚠]/g,'').trim();
+  doc.text(verdictClean, ml, y); y+=8;
+
+  // ── SÉPARATEUR ──
+  doc.setDrawColor(...C.midGray); doc.setLineWidth(0.3); doc.line(ml,y,W-mr,y); y+=5;
+
+  // ── RÉPARTITION ──
+  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...C.navy);
+  doc.text('RÉPARTITION PAR TYPE', ml, y); y+=5;
+
+  const lblW=72, pctW=14, barX=ml+lblW, barW=cW-lblW-pctW-2;
+
+  function pdfBar(lbl, pct, level, isHighlight){
+    const indent=level*8;
+    const fSize=level===0?7.5:level===1?7:6.5;
+    const fWeight=level===0?'bold':'normal';
+    const lColor=level===0?C.black:level===1?C.gray:[140,140,140];
+    doc.setFont('helvetica',fWeight); doc.setFontSize(fSize); doc.setTextColor(...lColor);
+    doc.text(lbl, ml+indent, y+3.2);
+    // Barre
+    const bw=level===0?barW:barW*0.55;
+    const bh=level===0?4.5:level===1?3.5:3;
+    const by=y+(level===0?0.5:1);
+    const bColor=isHighlight?C.blue:level===0?C.midGray:[200,210,220];
+    doc.setFillColor(230,235,242); doc.roundedRect(barX,by,bw,bh,0.5,0.5,'F');
+    if(pct>0){ doc.setFillColor(...bColor); doc.roundedRect(barX,by,Math.max(pct/100*bw,0.5),bh,0.5,0.5,'F'); }
+    doc.setFont('helvetica','bold'); doc.setFontSize(fSize); doc.setTextColor(isHighlight?C.navy[0]:80,isHighlight?C.navy[1]:80,isHighlight?C.navy[2]:80);
+    doc.text(pct.toFixed(0)+'%', barX+bw+2, y+3.2);
+    y+=level===0?7:level===1?5.5:5;
+  }
+
+  const maxP=Math.max(r.pNormal,r.pDysRV,r.pAchro);
+  pdfBar('Vision normale', r.pNormal, 0, r.pNormal===maxP);
+  pdfBar('Dyschromatopsie Rouge / Vert', r.pDysRV, 0, r.pDysRV===maxP);
+  if(r.pDysRV>0){
+    const totalPD=(r.cProtG+r.cProtL+r.cDeutG+r.cDeutL)||1;
+    const pProt=Math.round((r.cProtG+r.cProtL)/totalPD*100);
+    const pDeut=100-pProt;
+    pdfBar('Protan', pProt, 1, false);
+    if(r.cProtG>0||r.cProtL>0){
+      if(r.cProtG>0) pdfBar('• forme grave', Math.round(r.cProtG/(r.cProtG+r.cProtL||1)*100), 2, false);
+      if(r.cProtL>0) pdfBar('• forme légère', Math.round(r.cProtL/(r.cProtG+r.cProtL||1)*100), 2, false);
+    }
+    pdfBar('Deutan', pDeut, 1, false);
+    if(r.cDeutG>0||r.cDeutL>0){
+      if(r.cDeutG>0) pdfBar('• forme grave', Math.round(r.cDeutG/(r.cDeutG+r.cDeutL||1)*100), 2, false);
+      if(r.cDeutL>0) pdfBar('• forme légère', Math.round(r.cDeutL/(r.cDeutG+r.cDeutL||1)*100), 2, false);
+    }
+  }
+  pdfBar('Achromatopsie totale', r.pAchro, 0, r.pAchro===maxP);
+
+  // Faux négatif
+  if(r.cIncoh!==undefined){
+    const fn=r.cIncoh, tot=r.indices.filter(id=>new Set([1,38]).has(id)).length;
+    if(tot>0){
+      doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(...C.gray);
+      const fnColor=fn===0?C.green:fn<tot?[150,80,0]:C.red;
+      doc.text('Faux négatif :', ml, y+3);
+      doc.setFont('helvetica','bold'); doc.setTextColor(...fnColor);
+      doc.text(`${fn}/${tot}`, ml+24, y+3);
+      doc.setFont('helvetica','normal'); doc.setTextColor(...C.gray);
+      doc.text(fn===0?'— Examen fiable':fn===tot?'— Fiabilité compromise':'— Fiabilité réduite', ml+32, y+3);
+      y+=8;
+    }
+  }
+
+  // ── SÉPARATEUR ──
+  doc.setDrawColor(...C.midGray); doc.setLineWidth(0.3); doc.line(ml,y,W-mr,y); y+=5;
+
+  // ── TABLEAU DÉTAIL ──
+  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...C.navy);
+  doc.text('DÉTAIL DES RÉPONSES', ml, y); y+=5;
+
+  const tCols=[
+    {lbl:'N°',w:10},
+    {lbl:'Réponse patient',w:cW*0.22},
+    {lbl:'Normale',w:cW*0.18},
+    {lbl:'Protan grave',w:cW*0.12},
+    {lbl:'Protan léger',w:cW*0.12},
+    {lbl:'Deutan grave',w:cW*0.12},
+    {lbl:'Deutan léger',w:cW*0.12},
+  ];
+  // Ajuster pour que la somme = cW
+  const sumW=tCols.reduce((s,c)=>s+c.w,0);
+  tCols[6].w=cW-sumW+tCols[6].w;
+
+  // Header
+  doc.setFillColor(...C.navy); doc.rect(ml,y,cW,5.5,'F');
+  let cx=ml;
+  tCols.forEach(c=>{
+    doc.setFont('helvetica','bold'); doc.setFontSize(6); doc.setTextColor(...C.white);
+    doc.text(c.lbl,cx+c.w/2,y+3.8,{align:'center'}); cx+=c.w;
+  }); y+=5.5;
+
+  const rH=5.5;
+  r.indices.forEach((id,ri)=>{
+    const p=PLANCHES_DATA[id]; if(!p)return;
+    if(y>270){ doc.addPage(); y=15; }
+
+    // Lire la réponse
+    let paDisplay='', cat='', isEmpty=false;
+    if(p.type==='chiffre'){
+      const raw=(answers[id]||'').trim();
+      if(!raw){ isEmpty=true; }
+      else if(raw.toLowerCase()==='x'){ cat=classifyChiffreAnswer(id,raw); paDisplay='Non vu'; }
+      else { cat=classifyChiffreAnswer(id,raw); paDisplay=raw; }
+    } else {
+      const arr=answers[id]||[];
+      if(!arr.length||arr.includes('Non vu')){ isEmpty=arr.includes('Non vu'); paDisplay=arr.includes('Non vu')?'Non vu':''; if(!arr.length)isEmpty=true; }
+      else {
+        paDisplay=arr.join(', ');
+        const cL=p.options.filter(o=>o.correct).map(o=>o.label);
+        const isNorm=cL.every(l=>arr.includes(l))&&arr.every(l=>cL.includes(l));
+        if(isNorm){ cat='normale'; }
+        else {
+          const selOpt=p.options.find(o=>arr.includes(o.label)&&!o.correct);
+          cat=selOpt?.tag||'dysTrajet';
+        }
+      }
+    }
+    // Valeurs de référence
+    let rNorm, rPG='', rPL='', rDG='', rDL='';
+    if(p.type==='chiffre'){ rNorm=p.normale; rPG=p.protG||''; rPL=p.protL||''; rDG=p.deutG||''; rDL=p.deutL||''; }
+    else {
+      rNorm=p.options.filter(o=>o.correct).map(o=>o.label).join(', ');
+      rPG=p.options.filter(o=>o.tag==='protG').map(o=>o.label).join(', ');
+      rDG=p.options.filter(o=>o.tag==='deutG').map(o=>o.label).join(', ');
+    }
+
+    // Fond alterné
+    if(ri%2===0){ doc.setFillColor(...C.lightGray); doc.rect(ml,y,cW,rH,'F'); }
+
+    // Surlignage colonne correspondante
+    const colX=[ml,ml+tCols[0].w,ml+tCols[0].w+tCols[1].w,ml+tCols[0].w+tCols[1].w+tCols[2].w];
+    if(!isEmpty&&cat==='normale'){ doc.setFillColor(...C.lightGreen); doc.rect(colX[2],y,tCols[2].w,rH,'F'); }
+    else if(!isEmpty&&cat&&cat!=='normale'&&cat!=='autre'){
+      const col={protG:3,protL:4,deutG:5,deutL:6}[cat];
+      if(col){ doc.setFillColor(...C.lightRed); const cx2=tCols.slice(0,col).reduce((s,c)=>s+c.w,ml); doc.rect(cx2,y,tCols[col].w,rH,'F'); }
+    }
+
+    cx=ml;
+    const cells=[
+      {txt:String(id)+(new Set([1,38]).has(id)?'*':''), bold:true},
+      {txt:isEmpty?'—':paDisplay, color:isEmpty?C.midGray:cat==='normale'?C.green:cat&&cat!=='autre'?[140,60,20]:C.gray},
+      {txt:rNorm||'—', color:C.black},
+      {txt:rPG||'—', color:C.gray},
+      {txt:rPL||'—', color:C.gray},
+      {txt:rDG||'—', color:C.gray},
+      {txt:rDL||'—', color:C.gray},
+    ];
+    cells.forEach((cell,i)=>{
+      const c=tCols[i];
+      doc.setFont('helvetica',cell.bold?'bold':'normal'); doc.setFontSize(6.5);
+      doc.setTextColor(...(cell.color||C.black));
+      const txt=String(cell.txt||''); const maxLen=Math.floor(c.w/1.4);
+      const disp=txt.length>maxLen?txt.slice(0,maxLen-1)+'…':txt;
+      doc.text(disp, cx+c.w/2, y+3.6, {align:'center'}); cx+=c.w;
+    });
+    doc.setDrawColor(215,220,230); doc.setLineWidth(0.2); doc.line(ml,y+rH,ml+cW,y+rH);
+    y+=rH;
+  });
+
+  // Note de bas
+  y+=3;
+  doc.setFont('helvetica','italic'); doc.setFontSize(6.5); doc.setTextColor(...C.midGray);
+  doc.text('* Planches 1 et 38 : non comptabilisées dans les statistiques (réponse identique pour tous)', ml, y);
+
+  // Pied de page
+  doc.setDrawColor(...C.midGray); doc.setLineWidth(0.3); doc.line(ml,287,W-mr,287);
+  doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(...C.midGray);
+  doc.text(`Test d'Ishihara — Bilan colorimétrique`, ml, 292);
+  doc.text(`Document généré le ${today}`, W-mr, 292, {align:'right'});
+
+  doc.save(`Ishihara_${nomF}_${dateF.replace(/\//g,'-')}.pdf`);
+  closePdfModal(); showToast('PDF téléchargé');
+}
+
+function showToast(msg){ const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600); }
+
+// INIT
+document.getElementById('dateExamen').value=new Date().toISOString().slice(0,10);
+buildPlanches();
+</script>
+</body>
+</html>
