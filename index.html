@@ -183,6 +183,9 @@ body {
 .detail-table th { background:#2c5282; color:white; padding:6px 8px; text-align:center; font-weight:600; }
 .detail-table td { padding:5px 8px; text-align:center; border-bottom:1px solid #e2e8f0; }
 .detail-table tr:nth-child(even) td { background:#f7fafc; }
+/* Espace blanc entre colonne patient et colonne Normal — data rows + header row 1 */
+.detail-table tbody td:nth-child(2),
+.detail-table thead tr:first-child th:nth-child(2) { border-right: 8px solid white; }
 .cell-ok  { background:#c6f6d5 !important; color:#22543d; font-weight:600; }
 .cell-err { background:#fed7d7 !important; color:#742a2a; font-weight:600; }
 .btn { flex:1; padding:12px; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; transition:all .2s; font-family:inherit; }
@@ -272,7 +275,6 @@ body {
             </thead>
             <tbody id="detailBody"></tbody>
           </table>
-          <div style="font-size:10px;color:#a0aec0;margin-top:6px;">* Planches 1 et 38 : non comptabilisées dans les statistiques</div>
         </div>
       </div>
     </div>
@@ -619,9 +621,9 @@ function computeResults(){
   const cProt=cProtG+cProtL,cDeut=cDeutG+cDeutL;
   let vClass='verdict-ok',vText='';
   if(answered===0){vClass='verdict-ok';vText='';}
-  else if(tauxErreur===0){vClass='verdict-ok';vText='Test normal — Aucune dyschromatopsie détectée.';}
-  else if(tauxErreur<=20){vClass='verdict-dys';vText='⚠ Légères anomalies — À corréler cliniquement.';}
-  else{vClass='verdict-dys';vText='Suspicion de dyschromatopsie — À corréler cliniquement.';}
+  else if(tauxErreur===0){vClass='verdict-ok';vText='Test normal : Aucune dyschromatopsie détectée.';}
+  else if(tauxErreur<=20){vClass='verdict-dys';vText='⚠ Légères anomalies : À corréler cliniquement.';}
+  else{vClass='verdict-dys';vText='Suspicion de dyschromatopsie : À corréler cliniquement.';}
   document.getElementById('resTauxErr').textContent=tauxErreur.toFixed(1)+'%'; document.getElementById('resTauxErr').style.color=tauxErreur===0?'#22543d':'#c05621';
   document.getElementById('resCorrect').textContent=correct+'/'+answered; document.getElementById('resCorrect').style.color=tauxErreur===0?'#22543d':'#2c5282';
   document.getElementById('resErrors').textContent=incorrect.length+'/'+answered; document.getElementById('resErrors').style.color=incorrect.length===0?'#22543d':'#c05621';
@@ -653,14 +655,16 @@ function computeResults(){
     } else { addHisLine('↳ Protan',0,true,false); addHisLine('↳ Deutan',0,true,false); }
   }
   // Achromatopsie totale : supprimée de la répartition par type
-  // Faux négatif
+  // Planche de contrôle (planches 1 & 38)
   const neutresInVersion=indices.filter(id=>NEUTRES.has(id));
   const isNeutreTested=id=>{ const p=PLANCHES_DATA[id];if(!p)return false; if(p.type==='chiffre')return !!(answers[id]||'').trim(); return(answers[id]||[]).length>0; };
   const neutresTested=neutresInVersion.filter(isNeutreTested).length;
-  if(neutresInVersion.length>0){
-    const fnEl=document.createElement('div'); fnEl.style.cssText='margin-top:12px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;gap:8px;font-size:12px;color:#4a5568;';
-    if(neutresTested===0){ fnEl.innerHTML=`<span style="color:#718096;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Faux négatifs</span><span style="color:#a0aec0;font-size:11px;">Planches 1 et 38 non testées</span>`; }
-    else { const fxNeg=cIncoh; const fnColor=fxNeg===0?'#22543d':fxNeg===1?'#c05621':'#c53030'; const fiab=fxNeg===0?'Examen fiable':(fxNeg===neutresTested?'Fiabilité du test compromise':'Fiabilité réduite'); fnEl.innerHTML=`<span style="color:#718096;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Faux négatif</span><span style="font-weight:700;color:${fnColor};font-size:14px;">${fxNeg}/${neutresTested}</span><span style="color:#a0aec0;font-size:11px;">${fiab}</span>`; }
+  if(neutresInVersion.length>0 && neutresTested>0){
+    const bonnes=neutresTested-cIncoh;
+    const fnColor=cIncoh===0?'#22543d':'#c53030';
+    const fnEl=document.createElement('div');
+    fnEl.style.cssText='margin-top:12px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;gap:8px;font-size:12px;color:#4a5568;';
+    fnEl.innerHTML=`<span style="color:#718096;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Planche de contrôle</span><span style="font-weight:700;color:${fnColor};font-size:14px;">${bonnes}/${neutresTested}</span>`;
     hw.appendChild(fnEl);
   }
 
@@ -669,6 +673,7 @@ function computeResults(){
   const tbody=document.getElementById('detailBody'); tbody.innerHTML='';
   const fmtX=v=>(v&&v.toString().toLowerCase()==='x')?'Non vu':(v||'');
   indices.forEach(id=>{
+    if(NEUTRES_SET.has(id)) return; // planches de contrôle non affichées
     const p=PLANCHES_DATA[id]; if(!p)return;
     let paDisplay='',cat='',isEmpty=false;
     if(p.type==='chiffre'){ const raw=(answers[id]||'').trim(); if(!raw){isEmpty=true;}else if(raw.toLowerCase()==='x'){cat=classifyChiffreAnswer(id,raw);paDisplay='Non vu';}else{cat=classifyChiffreAnswer(id,raw);paDisplay=raw;} }
@@ -678,18 +683,13 @@ function computeResults(){
     else{rNorm=p.options.filter(o=>o.correct).map(o=>o.label).join(', ');const protOpts=p.options.filter(o=>o.tag==='protG'||o.tag==='protL').map(o=>o.label).join(', ');const deutOpts=p.options.filter(o=>o.tag==='deutG'||o.tag==='deutL').map(o=>o.label).join(', ');const dysOpts=p.options.filter(o=>o.tag==='dyschro').map(o=>o.label).join(', ');rPG=protOpts||dysOpts;rPL='';rDG=deutOpts||dysOpts;rDL='';}
     const normClass=(!isEmpty&&cat==='normale')?'cell-ok':'';
     let patStyle='';
-    if(isEmpty)patStyle='color:#a0aec0;font-style:italic;font-size:11px';
-    else if(cat==='autre'||cat===null)patStyle='color:#e53e3e;font-weight:600';
-    else if(cat==='normale')patStyle='color:#22543d;font-weight:600';
-    else patStyle='font-weight:600;color:#c05621';
+    if(isEmpty) patStyle='color:#a0aec0;font-style:italic;font-size:11px';
+    else if(cat==='nonvu'||paDisplay==='Non vu') patStyle='color:#e53e3e;font-weight:600';
+    else patStyle='color:#2d3748;font-weight:600';
     const tr=document.createElement('tr');
-    const numCell=`<td style="font-weight:700">${id}${NEUTRES_SET.has(id)?'<sup style="color:#a0aec0;font-size:8px">*</sup>':''}</td>`;
+    const numCell=`<td style="font-weight:700">${id}</td>`;
     const patCell=`<td style="${patStyle}">${isEmpty?'Non répondu':paDisplay}</td>`;
-    if(NEUTRES_SET.has(id)){
-      const uniVal=rNorm||(p.type==='trajet'?p.options.find(o=>o.correct)?.label:'');
-      const cls=(!isEmpty&&cat==='normale')?'cell-ok':(!isEmpty&&cat!=='normale'&&cat!=='autre')?'cell-err':'';
-      tr.innerHTML=`${numCell}${patCell}<td colspan="5" class="${cls}" style="text-align:center">${uniVal}</td>`;
-    } else if(id>=1&&id<=21){
+    if(id>=1&&id<=21){
       const dysVal=rPG||rDG||''; const dyCls=(!isEmpty&&cat!=='normale'&&cat!=='autre'&&cat!==null)?'cell-err':''; const normCls=(!isEmpty&&cat==='normale')?'cell-ok':'';
       tr.innerHTML=`${numCell}${patCell}<td class="${normCls}">${rNorm}</td><td colspan="4" class="${dyCls}" style="text-align:center">${dysVal}</td>`;
     } else if(id>=28&&id<=37){
@@ -753,13 +753,14 @@ function generatePDF(){
   doc.text(taux.toFixed(1)+'%',ml+38,y+bH*0.7);
   const vClean=(r.vText||'').replace(/[✅⚠]/g,'').trim();
   if(vClean){doc.setFont('helvetica','italic');doc.setFontSize(6.5);doc.setTextColor(...C.gray);doc.text(vClean,ml+52,y+bH*0.6);}
-  // Faux négatif inline
+  // Planche de contrôle inline dans le bandeau
   if(r.cIncoh!==undefined){
-    const fn=r.cIncoh,tot=r.indices.filter(id=>new Set([1,38]).has(id)).length;
-    if(tot>0){const fnC=fn===0?C.green:fn<tot?[150,80,0]:C.red;
-      doc.setFont('helvetica','normal');doc.setFontSize(6);doc.setTextColor(...C.gray);doc.text('Faux négatif :',W-mr-52,y+4);
-      doc.setFont('helvetica','bold');doc.setTextColor(...fnC);doc.text(`${fn}/${tot}`,W-mr-28,y+4);
-      doc.setFont('helvetica','normal');doc.setTextColor(...C.gray);doc.text(fn===0?'Fiable':fn===tot?'Compromis':'Réduit',W-mr-22,y+4);}
+    const tot=r.indices.filter(id=>new Set([1,38]).has(id)).length;
+    if(tot>0){
+      const bonnes=tot-r.cIncoh; const fnC=r.cIncoh===0?C.green:C.red;
+      doc.setFont('helvetica','normal');doc.setFontSize(6);doc.setTextColor(...C.gray);doc.text('Planche de contrôle :',W-mr-52,y+4);
+      doc.setFont('helvetica','bold');doc.setTextColor(...fnC);doc.text(`${bonnes}/${tot}`,W-mr-17,y+4);
+    }
   }
   y+=bH+3;
 
@@ -829,7 +830,8 @@ function generatePDF(){
   const NEUTRES_PDF=new Set([1,38]);
   r.indices.forEach((id,ri)=>{
     const p=PLANCHES_DATA[id];if(!p)return;
-    if(y>H-10) return; // clip si débordement
+    if(NEUTRES_PDF.has(id)) return; // planches de contrôle non affichées
+    if(y>H-10) return;
     let paDisplay='',cat='',isEmpty=false;
     if(p.type==='chiffre'){const raw=(answers[id]||'').trim();if(!raw){isEmpty=true;}else if(raw.toLowerCase()==='x'){cat=classifyChiffreAnswer(id,raw);paDisplay='Non vu';}else{cat=classifyChiffreAnswer(id,raw);paDisplay=raw;}}
     else{const arr=answers[id]||[];if(!arr.length){isEmpty=true;}else if(arr.includes('Non vu')){cat='nonvu';paDisplay='Non vu';}else{paDisplay=arr.join(', ');const cL=p.options.filter(o=>o.correct).map(o=>o.label);const isNorm=cL.every(l=>arr.includes(l))&&arr.every(l=>cL.includes(l));if(isNorm){cat='normale';}else{const selOpt=p.options.find(o=>arr.includes(o.label)&&!o.correct);cat=selOpt?.tag||'dysTrajet';}}}
@@ -839,27 +841,31 @@ function generatePDF(){
     if(ri%2===0){doc.setFillColor(...C.lightGray);doc.rect(ml,y,cW,rH,'F');}
     if(!isEmpty&&cat==='normale'){doc.setFillColor(...C.lightGreen);doc.rect(ml+tCols[0].w+tCols[1].w,y,tCols[2].w,rH,'F');}
     else if(!isEmpty&&cat&&cat!=='normale'&&cat!=='autre'&&cat!=='nonvu'){const colMap={protG:3,protL:4,deutG:5,deutL:6};const col=colMap[cat];if(col){doc.setFillColor(...C.lightRed);const cx2=tCols.slice(0,col).reduce((s,c)=>s+c.w,ml);doc.rect(cx2,y,tCols[col].w,rH,'F');}}
-    const isNeutre=NEUTRES_PDF.has(id);const isSimple=(id>=1&&id<=21&&!isNeutre)||(id>=28&&id<=37);
+    const isNeutre=false; // planches 1/38 filtrées plus haut
+    const isSimple=(id>=1&&id<=21)||(id>=28&&id<=37);
     const isProtan26=(p.type==='trajet'&&cat==='protG');const isDeutan26=(p.type==='trajet'&&cat==='deutG');
     const cy=y+rH*0.67; const fs=isLandscape?5.2:5.8;
     cx=ml;
     doc.setFont('helvetica','bold');doc.setFontSize(fs);doc.setTextColor(...C.black);
-    doc.text(String(id)+(isNeutre?'*':''),cx+tCols[0].w/2,cy,{align:'center'});cx+=tCols[0].w;
-    const pColor=isEmpty?C.midGray:cat==='normale'?C.green:(cat&&cat!=='autre'&&cat!=='nonvu')?[140,60,20]:C.gray;
+    doc.text(String(id),cx+tCols[0].w/2,cy,{align:'center'});cx+=tCols[0].w;
+    const pColor=isEmpty?C.midGray:(cat==='nonvu'||paDisplay==='Non vu')?C.red:C.black;
     doc.setFont('helvetica',isEmpty?'normal':'bold');doc.setFontSize(fs);doc.setTextColor(...pColor);
-    const pDisp=isEmpty?'—':(paDisplay||'');const pMax=Math.floor(tCols[1].w/1.15);doc.text(pDisp.length>pMax?pDisp.slice(0,pMax-1)+'…':pDisp,cx+tCols[1].w/2,cy,{align:'center'});cx+=tCols[1].w;
+    const pDisp=isEmpty?'-':(paDisplay||'');const pMax=Math.floor(tCols[1].w/1.15);doc.text(pDisp.length>pMax?pDisp.slice(0,pMax-1)+'…':pDisp,cx+tCols[1].w/2,cy,{align:'center'});cx+=tCols[1].w;
     doc.setFont('helvetica','normal');doc.setFontSize(fs);doc.setTextColor(...C.black);
-    const nMax=Math.floor(tCols[2].w/1.15);const nD=String(rNorm||'—');doc.text(nD.length>nMax?nD.slice(0,nMax-1)+'…':nD,cx+tCols[2].w/2,cy,{align:'center'});cx+=tCols[2].w;
+    const nMax=Math.floor(tCols[2].w/1.15);const nD=String(rNorm||'-');doc.text(nD.length>nMax?nD.slice(0,nMax-1)+'…':nD,cx+tCols[2].w/2,cy,{align:'center'});cx+=tCols[2].w;
     doc.setFontSize(fs);doc.setTextColor(...C.gray);
     if(isNeutre){cx+=tCols[3].w+tCols[4].w+tCols[5].w+tCols[6].w;}
-    else if(isSimple){const dv=rPG||rDG||'—';const dMax=Math.floor((tCols[3].w+tCols[4].w+tCols[5].w+tCols[6].w)/1.15);doc.text(dv.length>dMax?dv.slice(0,dMax-1)+'…':dv,cx+(tCols[3].w+tCols[4].w+tCols[5].w+tCols[6].w)/2,cy,{align:'center'});cx+=tCols[3].w+tCols[4].w+tCols[5].w+tCols[6].w;}
-    else if(isProtan26){doc.setTextColor(...C.red);const pv=rPG||'—';doc.text(pv,cx+(tCols[3].w+tCols[4].w)/2,cy,{align:'center'});cx+=tCols[3].w+tCols[4].w;doc.setTextColor(...C.gray);doc.text('—',cx+tCols[5].w/2,cy,{align:'center'});cx+=tCols[5].w;doc.text('—',cx+tCols[6].w/2,cy,{align:'center'});cx+=tCols[6].w;}
-    else if(isDeutan26){doc.setTextColor(...C.gray);doc.text('—',cx+tCols[3].w/2,cy,{align:'center'});cx+=tCols[3].w;doc.text('—',cx+tCols[4].w/2,cy,{align:'center'});cx+=tCols[4].w;doc.setTextColor(...C.red);const dv2=rDG||'—';doc.text(dv2,cx+(tCols[5].w+tCols[6].w)/2,cy,{align:'center'});cx+=tCols[5].w+tCols[6].w;}
-    else{[{val:rPG,col:3},{val:rPL,col:4},{val:rDG,col:5},{val:rDL,col:6}].forEach(({val,col})=>{const isHL=(cat==='protG'&&col===3)||(cat==='protL'&&col===4)||(cat==='deutG'&&col===5)||(cat==='deutL'&&col===6);doc.setTextColor(isHL?C.red[0]:C.gray[0],isHL?C.red[1]:C.gray[1],isHL?C.red[2]:C.gray[2]);const v=String(val||'—');const vMax=Math.floor(tCols[col].w/1.15);doc.text(v.length>vMax?v.slice(0,vMax-1)+'…':v,cx+tCols[col].w/2,cy,{align:'center'});cx+=tCols[col].w;});}
-    doc.setDrawColor(215,220,230);doc.setLineWidth(0.12);doc.line(ml,y+rH,ml+cW,y+rH);y+=rH;
+    else if(isSimple){const dv=rPG||rDG||'-';const dMax=Math.floor((tCols[3].w+tCols[4].w+tCols[5].w+tCols[6].w)/1.15);doc.text(dv.length>dMax?dv.slice(0,dMax-1)+'…':dv,cx+(tCols[3].w+tCols[4].w+tCols[5].w+tCols[6].w)/2,cy,{align:'center'});cx+=tCols[3].w+tCols[4].w+tCols[5].w+tCols[6].w;}
+    else if(isProtan26){doc.setTextColor(...C.red);const pv=rPG||'-';doc.text(pv,cx+(tCols[3].w+tCols[4].w)/2,cy,{align:'center'});cx+=tCols[3].w+tCols[4].w;doc.setTextColor(...C.gray);doc.text('-',cx+tCols[5].w/2,cy,{align:'center'});cx+=tCols[5].w;doc.text('-',cx+tCols[6].w/2,cy,{align:'center'});cx+=tCols[6].w;}
+    else if(isDeutan26){doc.setTextColor(...C.gray);doc.text('-',cx+tCols[3].w/2,cy,{align:'center'});cx+=tCols[3].w;doc.text('-',cx+tCols[4].w/2,cy,{align:'center'});cx+=tCols[4].w;doc.setTextColor(...C.red);const dv2=rDG||'-';doc.text(dv2,cx+(tCols[5].w+tCols[6].w)/2,cy,{align:'center'});cx+=tCols[5].w+tCols[6].w;}
+    else{[{val:rPG,col:3},{val:rPL,col:4},{val:rDG,col:5},{val:rDL,col:6}].forEach(({val,col})=>{const isHL=(cat==='protG'&&col===3)||(cat==='protL'&&col===4)||(cat==='deutG'&&col===5)||(cat==='deutL'&&col===6);doc.setTextColor(isHL?C.red[0]:C.gray[0],isHL?C.red[1]:C.gray[1],isHL?C.red[2]:C.gray[2]);const v=String(val||'-');const vMax=Math.floor(tCols[col].w/1.15);doc.text(v.length>vMax?v.slice(0,vMax-1)+'…':v,cx+tCols[col].w/2,cy,{align:'center'});cx+=tCols[col].w;});}
+    doc.setDrawColor(215,220,230);doc.setLineWidth(0.12);doc.line(ml,y+rH,ml+cW,y+rH);
+    // Petit séparateur vertical entre colonne patient et colonne Normal
+    const sepX=ml+tCols[0].w+tCols[1].w;
+    doc.setDrawColor(200,210,225);doc.setLineWidth(0.4);doc.line(sepX,y,sepX,y+rH);
+    y+=rH;
   });
 
-  if(y<H-8){y+=1.5;doc.setFont('helvetica','italic');doc.setFontSize(5.5);doc.setTextColor(...C.midGray);doc.text('* Planches 1 et 38 : non comptabilisées dans les statistiques',ml,y);}
   doc.setDrawColor(...C.midGray);doc.setLineWidth(0.2);doc.line(ml,H-7,W-mr,H-7);
   doc.setFont('helvetica','normal');doc.setFontSize(5.5);doc.setTextColor(...C.midGray);
   doc.text("Test d'Ishihara — Bilan colorimétrique",ml,H-3.5);doc.text(`Généré le ${today}`,W-mr,H-3.5,{align:'right'});
