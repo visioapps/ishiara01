@@ -78,6 +78,15 @@ body {
   .header { padding: 8px 16px; }
   .header h1 { font-size: 18px; }
 }
+/* Mobile : date = icône seule, Binoculaire = Bino */
+@media (max-width: 600px) {
+  .date-label { display: none; }
+  .date-pill { position: relative; overflow: hidden; }
+  .date-pill input[type=date] {
+    position: absolute; top:0; left:0; width:100%; height:100%;
+    opacity: 0; cursor: pointer;
+  }
+}
 
 .controls-bar {
   background: white; border-radius: 12px; padding: 10px; margin-bottom: 12px;
@@ -105,7 +114,15 @@ body {
 }
 .progress-wrap { background: transparent; padding: 4px 0; margin-bottom: 12px; box-shadow: none; }
 .dots-row { display: flex; flex-wrap: nowrap; gap: 4px; align-items: center; justify-content: flex-start; overflow: visible; }
-.dot-circle { flex-shrink: 0; border-radius: 50%; background: #e2e8f0; transition: background .25s, transform .15s; position: relative; }
+.dot-circle {
+  flex-shrink: 0;
+  width: 12px; height: 12px;  /* taille fixe explicite */
+  border-radius: 50% !important;
+  background: #e2e8f0;
+  transition: background .25s, transform .15s;
+  position: relative;
+  display: inline-block;
+}
 .dot-circle:hover { transform: scale(1.4); }
 .dot-circle.ok  { background: #48bb78; }
 .dot-circle.err { background: #fc8181; }
@@ -245,8 +262,8 @@ body {
       <div class="controls-bar" style="margin-bottom:0;box-shadow:none;background:transparent;padding:0;">
         <div class="ctrl-col"><button class="toggle-btn" id="btnVersion" onclick="cycleVersion()">Version complète</button></div>
         <div class="ctrl-col"><button class="toggle-btn" id="btnCorrection" onclick="cycleCorrection()">Avec correction</button></div>
-        <div class="ctrl-col"><button class="toggle-btn" id="btnOeil" onclick="cycleOeil()">Binoculaire</button></div>
-        <div class="ctrl-col"><div class="date-pill"><span>📅</span><input type="date" id="dateExamen" onchange="updateInfoGrid()"></div></div>
+        <div class="ctrl-col"><button class="toggle-btn" id="btnOeil" onclick="cycleOeil()">Bino</button></div>
+        <div class="ctrl-col"><div class="date-pill"><span>📅</span><span class="date-label" id="dateLabel"></span><input type="date" id="dateExamen" onchange="updateInfoGrid();updateDateLabel()"></div></div>
       </div>
     </div>
     <div id="stickySaisie">
@@ -405,11 +422,12 @@ let answers = {};
 const VERSION_CYCLE    = ['Version complète','Chiffres','Trajets'];
 const CORRECTION_CYCLE = ['Avec correction','Sans correction'];
 const OEIL_CYCLE       = ['Binoculaire','Oeil droit','Oeil gauche'];
+const OEIL_SHORT       = ['Bino','OD','OG'];
 let versionIdx=0, correctionIdx=0, oeilIdx=0;
 
 function cycleVersion(){ versionIdx=(versionIdx+1)%VERSION_CYCLE.length; document.getElementById('btnVersion').textContent=VERSION_CYCLE[versionIdx]; buildPlanches(); updateInfoGrid(); }
 function cycleCorrection(){ correctionIdx=(correctionIdx+1)%CORRECTION_CYCLE.length; document.getElementById('btnCorrection').textContent=CORRECTION_CYCLE[correctionIdx]; updateInfoGrid(); }
-function cycleOeil(){ oeilIdx=(oeilIdx+1)%OEIL_CYCLE.length; document.getElementById('btnOeil').textContent=OEIL_CYCLE[oeilIdx]; updateInfoGrid(); }
+function cycleOeil(){ oeilIdx=(oeilIdx+1)%OEIL_CYCLE.length; document.getElementById('btnOeil').textContent=OEIL_SHORT[oeilIdx]; updateInfoGrid(); }
 function getVersion(){ return VERSION_CYCLE[versionIdx]; }
 function getCorrection(){ return CORRECTION_CYCLE[correctionIdx]; }
 function getOeil(){ return OEIL_CYCLE[oeilIdx]; }
@@ -615,7 +633,7 @@ function resetAll(){ document.getElementById('resetModal').classList.add('open')
 function closeResetModal(){ document.getElementById('resetModal').classList.remove('open'); }
 function confirmReset(){
   closeResetModal(); answers={}; versionIdx=0; correctionIdx=0; oeilIdx=0;
-  document.getElementById('btnVersion').textContent=VERSION_CYCLE[0]; document.getElementById('btnCorrection').textContent=CORRECTION_CYCLE[0]; document.getElementById('btnOeil').textContent=OEIL_CYCLE[0];
+  document.getElementById('btnVersion').textContent=VERSION_CYCLE[0]; document.getElementById('btnCorrection').textContent=CORRECTION_CYCLE[0]; document.getElementById('btnOeil').textContent=OEIL_SHORT[0];
   document.getElementById('dateExamen').value=new Date().toISOString().slice(0,10);
   buildPlanches(); switchView('planches',document.getElementById('tabSaisie')); showToast('Réinitialisé');
 }
@@ -832,23 +850,24 @@ function generatePDF(){
   const bx=ml+62, bw=cW-62-14;
 
   function pdfBar(lbl,pct,level){
+    const p=Math.round(Number(pct)||0);
     const ind=level*6, fs=level===0?7:level===1?6.5:6;
     doc.setFont('helvetica',level===0?'bold':'normal');doc.setFontSize(fs);
     doc.setTextColor(...(level===0?C.black:C.gray));
     doc.text(lbl,ml+ind,y+2.8);
     const bwL=level===0?bw:bw*0.5, bh=level===0?4:2.8, by=y+0.2;
     doc.setFillColor(228,233,242);doc.roundedRect(bx,by,bwL,bh,0.3,0.3,'F');
-    if(pct>0){
+    if(p>0){
       doc.setFillColor(...(level===0?C.blue:C.midGray));
-      doc.roundedRect(bx,by,Math.max(pct/100*bwL,0.3),bh,0.3,0.3,'F');
+      doc.roundedRect(bx,by,Math.max(p/100*bwL,0.3),bh,0.3,0.3,'F');
     }
     doc.setFont('helvetica','bold');doc.setFontSize(fs);doc.setTextColor(50,50,50);
-    doc.text(pct.toFixed(0)+'%',bx+bwL+2,y+2.8);
+    doc.text(p+'%',bx+bwL+2,y+2.8);
     y+=level===0?6:level===1?5:4.5;
   }
 
-  pdfBar('Vision normale',r.pNormal,0);
-  pdfBar('Dyschromatopsie Rouge / Vert',r.pDysRV,0);
+  pdfBar('Vision normale', Math.round(Number(r.pNormal)||0), 0);
+  pdfBar('Dyschromatopsie Rouge / Vert', Math.round(Number(r.pDysRV)||0), 0);
   if(r.pDysRV>0){
     const totalPD=(r.cProtG+r.cProtL+r.cDeutG+r.cDeutL)||1;
     const pProt=Math.round((r.cProtG+r.cProtL)/totalPD*100);
@@ -1030,11 +1049,48 @@ function generatePDF(){
     y+=rH; rowIdx++;
   });
 
-  doc.save(`Ishihara_${nomF}_${dateF.replace(/\//g,'-')}.pdf`);
-  closePdfModal(); showToast('PDF téléchargé');
+  // ── LOGO centré sous le tableau ──
+  try {
+    const img=new Image(); img.crossOrigin='anonymous';
+    img.onload=()=>{
+      try{
+        const canvas=document.createElement('canvas');
+        canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
+        canvas.getContext('2d').drawImage(img,0,0);
+        const imgData=canvas.toDataURL('image/png');
+        const logoW=40, logoH=Math.min(20, logoW*(img.naturalHeight/img.naturalWidth));
+        const logoX=(W-logoW)/2;
+        const logoY=Math.min(y+6, H-logoH-6);
+        doc.addImage(imgData,'PNG',logoX,logoY,logoW,logoH);
+      }catch(e){}
+      doc.save(`Ishihara_${nomF}_${dateF.replace(/\//g,'-')}.pdf`);
+      closePdfModal(); showToast('PDF téléchargé');
+    };
+    img.onerror=()=>{
+      // Logo non trouvé : on sauvegarde quand même
+      doc.save(`Ishihara_${nomF}_${dateF.replace(/\//g,'-')}.pdf`);
+      closePdfModal(); showToast('PDF téléchargé');
+    };
+    img.src='logo.png'; // logo.png dans le même dossier que le fichier HTML
+  } catch(e){
+    doc.save(`Ishihara_${nomF}_${dateF.replace(/\//g,'-')}.pdf`);
+    closePdfModal(); showToast('PDF téléchargé');
+  }
+}
+function updateDateLabel(){
+  const d=document.getElementById('dateExamen');
+  const lbl=document.getElementById('dateLabel');
+  if(!lbl)return;
+  if(d&&d.value){
+    const parts=d.value.split('-');
+    lbl.textContent=parts[2]+'/'+parts[1]; // DD/MM
+  } else {
+    lbl.textContent='';
+  }
 }
 function showToast(msg){ const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600); }
 document.getElementById('dateExamen').value=new Date().toISOString().slice(0,10);
+updateDateLabel();
 buildPlanches();
 </script>
 </body>
