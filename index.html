@@ -972,17 +972,17 @@ function generatePDF(){
   const gap=3; // espace blanc entre patient et normal
   const remW=cW-10-gap;
   const tCols=[
-    {lbl:'N°',         w:10},
-    {lbl:'Rép. patient',w:remW*0.21},
-    {lbl:'',           w:gap},   // espace blanc
-    {lbl:'Normal',     w:remW*0.17},
-    {lbl:'Protan\ngrave', w:remW*0.13},
-    {lbl:'Protan\nléger', w:remW*0.13},
-    {lbl:'Deutan\ngrave', w:remW*0.13},
-    {lbl:'Deutan\nléger', w:remW*0.13},
+    {lbl:'N°',              w:10},
+    {lbl:'Rép. patient',    w:remW*0.22},
+    {lbl:'',                w:gap},
+    {lbl:'Normal',          w:remW*0.18},
+    {lbl:'Protan\ngrave',   w:remW*0.15},
+    {lbl:'Protan\nléger',   w:remW*0.15},
+    {lbl:'Deutan\ngrave',   w:remW*0.15},
+    {lbl:'Deutan\nléger',   w:remW*0.15},
   ];
-  // Ajuster dernière col pour que sum = cW
-  const sumW=tCols.reduce((s,c)=>s+c.w,0); tCols[7].w+=cW-sumW;
+  // Ajuster la dernière col pour que la somme = cW exactement
+  const sumW=tCols.reduce((s,c)=>s+c.w,0); tCols[7].w=Math.max(tCols[7].w, cW-sumW+tCols[7].w);
 
   function drawTableHeader(yy){
     doc.setFillColor(...C.navy);doc.rect(ml,yy,cW,6.5,'F');
@@ -1106,12 +1106,14 @@ function generatePDF(){
     doc.setFontSize(fs);
 
     if(isSimple){
-      const totalW=tCols[4].w+tCols[5].w+tCols[6].w+tCols[7].w;
+      // Fond fusionné déjà dessiné, texte répété dans chaque colonne individuellement
       const dv=rPG||rDG||'-';
-      doc.setFont('helvetica','normal');doc.setFontSize(fs);doc.setTextColor(...C.gray);
-      const dvL=doc.splitTextToSize(dv, totalW-2);
-      doc.text(dvL[0], cx+totalW/2, cy, {align:'center'});
-      cx+=totalW;
+      doc.setFont('helvetica','normal');doc.setFontSize(fs);
+      [tCols[4],tCols[5],tCols[6],tCols[7]].forEach(col=>{
+        doc.setTextColor(...C.gray);
+        doc.text(dv, cx+col.w/2, cy, {align:'center'});
+        cx+=col.w;
+      });
     } else if(isProtanTrajet){
       // Protan (rouge) + Deutan ref (gris)
       doc.setFont('helvetica','bold');doc.setFontSize(fs);doc.setTextColor(...C.red);
