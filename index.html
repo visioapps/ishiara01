@@ -89,21 +89,35 @@ body {
 
 /* Clavier numérique personnalisé (mobile chiffres) */
 #numPad {
-  display: none; position: fixed; bottom:0; left:0; right:0; z-index:8999;
-  background: #e8eef5; border-top:1px solid #cbd5e0;
-  padding: 8px 12px; padding-bottom: max(8px, env(safe-area-inset-bottom,8px));
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 9500; /* au-dessus de la bottom-nav (9000) */
+  background: #f0f4f8;
+  border-top: 2px solid #cbd5e0;
+  padding: 10px 12px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
 }
-#numPad.visible { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; align-items:center; }
+#numPad.visible { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
 .np-btn {
-  width:44px; height:36px; background:white; border:1px solid #cbd5e0; border-radius:7px;
-  font-size:15px; font-weight:600; color:#2d3748;
-  cursor:pointer; display:flex; align-items:center; justify-content:center; user-select:none;
+  width: 48px; height: 40px;
+  background: white; border: 1.5px solid #cbd5e0; border-radius: 8px;
+  font-size: 16px; font-weight: 600; color: #2d3748;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  user-select: none; -webkit-user-select: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  -webkit-tap-highlight-color: transparent;
 }
-.np-btn:active { background:#ebf4fb; }
-.np-btn.np-del { color:#c53030; font-size:18px; }
-.np-btn.np-ok  { background:#4299e1; color:white; border-color:#3182ce; min-width:60px; }
-body.numpad-open .bottom-nav { bottom:56px; }
-body.numpad-open .scroll-area { padding-bottom:calc(130px + env(safe-area-inset-bottom,0px)); }
+.np-btn:active { background: #e2e8f0; transform: scale(0.94); }
+.np-btn.np-del { color: #c53030; font-size: 20px; }
+.np-btn.np-ok  { background: #4299e1; color: white; border-color: #3182ce; min-width: 64px; }
+/* Quand le pad est ouvert : bottom-nav monte au-dessus du pad */
+body.numpad-open .bottom-nav {
+  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+}
+body.numpad-open .scroll-area {
+  padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px));
+}
 
 .controls-bar {
   background: white; border-radius: 12px; padding: 10px; margin-bottom: 12px;
@@ -1112,7 +1126,7 @@ function generatePDF(){
     y+=rH; rowIdx++;
   });
 
-  // ── LOGO centré sous le tableau ──
+  // ── LOGO centré sous le tableau (seulement si assez de place, sinon nouvelle page) ──
   try {
     const img=new Image(); img.crossOrigin='anonymous';
     img.onload=()=>{
@@ -1122,20 +1136,25 @@ function generatePDF(){
         canvas.getContext('2d').drawImage(img,0,0);
         const imgData=canvas.toDataURL('image/png');
         const ratio=img.naturalHeight/img.naturalWidth;
-        const logoW=40, logoH=logoW*ratio; // ratio conservé
+        const logoW=35, logoH=logoW*ratio;
+        // S'il ne reste pas assez de place : nouvelle page
+        if(y + logoH + 8 > H - 10){
+          doc.addPage();
+          y = 20;
+        } else {
+          y += 8;
+        }
         const logoX=(W-logoW)/2;
-        const logoY=Math.min(y+6, H-logoH-6);
-        doc.addImage(imgData,'PNG',logoX,logoY,logoW,logoH);
+        doc.addImage(imgData,'PNG',logoX,y,logoW,logoH);
       }catch(e){}
       doc.save(`Ishihara_${nomF}_${dateF.replace(/\//g,'-')}.pdf`);
       closePdfModal(); showToast('PDF téléchargé');
     };
     img.onerror=()=>{
-      // Logo non trouvé : on sauvegarde quand même
       doc.save(`Ishihara_${nomF}_${dateF.replace(/\//g,'-')}.pdf`);
       closePdfModal(); showToast('PDF téléchargé');
     };
-    img.src='logo.png'; // logo.png dans le même dossier que le fichier HTML
+    img.src='logo.png';
   } catch(e){
     doc.save(`Ishihara_${nomF}_${dateF.replace(/\//g,'-')}.pdf`);
     closePdfModal(); showToast('PDF téléchargé');
