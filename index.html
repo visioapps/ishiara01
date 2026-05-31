@@ -832,8 +832,9 @@ function closePdfModal(){ document.getElementById('pdfModal').classList.remove('
 
 function generatePDF(){
   const {jsPDF}=window.jspdf;
-  if(!window._lastResults) computeResults();
-  const r=window._lastResults; if(!r){showToast('Veuillez consulter les Résultats');return;}
+  // Toujours recalculer pour avoir des données fraîches
+  computeResults();
+  const r=window._lastResults; if(!r){showToast('Erreur de calcul');return;}
   const nom=(document.getElementById('pdfNom').value.trim()||'').toUpperCase();
   const prenom=document.getElementById('pdfPrenom').value.trim()||'';
   const nomC=[nom,prenom].filter(Boolean).join(' ')||'—';
@@ -959,16 +960,17 @@ function generatePDF(){
   doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(...C.navy);
   doc.text('DÉTAIL DES RÉPONSES',ml,y);y+=4;
 
-  // ── CALCUL DE L'ESPACE DISPONIBLE POUR LE TABLEAU ──
-  // Compte les lignes (hors planches 1 et 38)
+  // ── CALCUL DE L'ESPACE DISPONIBLE POUR LE TABLEAU (Fix 1) ──
+  // On connaît y ici (après séparateur+titre). Réserve logo + marge basse.
   const NEUTRES_PDF=new Set([1,38]);
   const tableRows=r.indices.filter(id=>!NEUTRES_PDF.has(id)&&PLANCHES_DATA[id]).length;
-  const logoReserve=20; // espace pour le logo
-  const tableAvail=H-y-10-logoReserve; // espace dispo pour tableau + logo
-  const hdrH=6.5;
-  const minRH=3.5, maxRH=5;
-  // Ajuster la hauteur de ligne pour que tout tienne
-  const rH=Math.max(minRH, Math.min(maxRH, (tableAvail-hdrH)/Math.max(tableRows,1)));
+  const logoH_est=15; // hauteur estimée du logo (mm)
+  const bottomMargin=10;
+  // y actuel + titre "DÉTAIL" (8pt + 4mm) + header tableau (6.5mm) + tableau + logo + marge
+  const yAfterTitre = y + 8; // titre + espace
+  const tableAvail = H - yAfterTitre - 6.5 - logoH_est - bottomMargin;
+  const minRH=3.2, maxRH=5;
+  const rH=Math.max(minRH, Math.min(maxRH, tableAvail/Math.max(tableRows,1)));
   const gap=3; // espace blanc entre patient et normal
   const remW=cW-10-gap;
   const tCols=[
@@ -1142,7 +1144,7 @@ function generatePDF(){
     y+=rH; rowIdx++;
   });
 
-  // ── LOGO centré sous le tableau (seulement si assez de place, sinon nouvelle page) ──
+  // ── LOGO centré sous le tableau — toujours page 1 ──
   try {
     const img=new Image(); img.crossOrigin='anonymous';
     img.onload=()=>{
@@ -1152,16 +1154,13 @@ function generatePDF(){
         canvas.getContext('2d').drawImage(img,0,0);
         const imgData=canvas.toDataURL('image/png');
         const ratio=img.naturalHeight/img.naturalWidth;
-        const logoW=35, logoH=logoW*ratio;
-        // S'il ne reste pas assez de place : nouvelle page
-        if(y + logoH + 8 > H - 10){
-          doc.addPage();
-          y = 20;
-        } else {
-          y += 8;
+        const logoW=30, logoH=logoW*ratio;
+        // Placer le logo entre la fin du tableau et la limite de page
+        const logoY=Math.min(y+4, H-logoH-6);
+        if(logoY>0 && logoY+logoH < H-4){
+          const logoX=(W-logoW)/2;
+          doc.addImage(imgData,'PNG',logoX,logoY,logoW,logoH);
         }
-        const logoX=(W-logoW)/2;
-        doc.addImage(imgData,'PNG',logoX,y,logoW,logoH);
       }catch(e){}
       doc.save(`Ishihara_${nomF}_${dateF.replace(/\//g,'-')}.pdf`);
       closePdfModal(); showToast('PDF téléchargé');
