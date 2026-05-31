@@ -894,7 +894,7 @@ function generatePDF(){
   doc.text("TAUX D'ERREUR",sx+3,y+5);
   doc.text(`${r.correct}/${r.answered} correctes`,sx+3,y+14);
   doc.setTextColor(...scoreColor);doc.setFont('helvetica','bold');doc.setFontSize(14);
-  doc.text(taux.toFixed(1)+'%',sx+sw-4,y+13,{align:'right'});
+  doc.text(Math.round(taux)+'%',sx+sw-4,y+13,{align:'right'});
   y+=22;
 
   // Verdict
@@ -1044,8 +1044,12 @@ function generatePDF(){
       rNorm=fmtX(p.normale);rPG=fmtX(p.protG);rPL=fmtX(p.protL);rDG=fmtX(p.deutG);rDL=fmtX(p.deutL);
     } else {
       rNorm=p.options.filter(o=>o.correct).map(o=>o.label).join(', ');
+      // Planches 26-27 : protG/deutG distincts
       rPG=p.options.filter(o=>o.tag==='protG').map(o=>o.label).join(', ');
       rDG=p.options.filter(o=>o.tag==='deutG').map(o=>o.label).join(', ');
+      // Planches 28-37 : une seule valeur dyschro (tag:'dyschro') → même valeur pour PG et DG
+      const dysVal=p.options.filter(o=>o.tag==='dyschro').map(o=>o.label).join(', ');
+      if(dysVal){ rPG=dysVal; rDG=dysVal; }
     }
 
     // Fond alterné
@@ -1054,15 +1058,14 @@ function generatePDF(){
     // Espace blanc entre col patient et col normal
     doc.setFillColor(...C.white);doc.rect(ml+tCols[0].w+tCols[1].w,y,tCols[2].w,rH,'F');
 
-    // Surlignage : colonne normale OU zone dyschro fusionnée
-    const isSimple=(id>=1&&id<=21)||(id>=28&&id<=37);
-    const isProtanTrajet=(p.type==='trajet'&&cat==='protG');
-    const isDeutanTrajet=(p.type==='trajet'&&cat==='deutG');
+    const isSimple=(id>=2&&id<=21)||(id>=28&&id<=37);
+    const isTrajet2627=(p.type==='trajet'&&(id===26||id===27));
+    const isProtanTrajet=(isTrajet2627&&cat==='protG');
+    const isDeutanTrajet=(isTrajet2627&&cat==='deutG');
     if(!isEmpty&&cat==='normale'){
       doc.setFillColor(...C.lightGreen);doc.rect(ml+tCols[0].w+tCols[1].w+tCols[2].w,y,tCols[3].w,rH,'F');
     } else if(!isEmpty&&cat&&cat!=='normale'&&cat!=='autre'&&cat!=='nonvu'){
-      if(isSimple){
-        // Colonne dyschro fusionnée (4 cols) → surligner toute la zone
+      if(isSimple&&!isTrajet2627){
         const x4=ml+tCols[0].w+tCols[1].w+tCols[2].w+tCols[3].w;
         const w4=tCols[4].w+tCols[5].w+tCols[6].w+tCols[7].w;
         doc.setFillColor(...C.lightRed);doc.rect(x4,y,w4,rH,'F');
@@ -1105,8 +1108,8 @@ function generatePDF(){
     // Colonnes dyschro
     doc.setFontSize(fs);
 
-    if(isSimple){
-      // Fond fusionné déjà dessiné, texte répété dans chaque colonne individuellement
+    if(isSimple && !isTrajet2627){
+      // Planches 2-21 et 28-37 : même valeur dans chaque colonne, fond fusionné déjà dessiné
       const dv=rPG||rDG||'-';
       doc.setFont('helvetica','normal');doc.setFontSize(fs);
       [tCols[4],tCols[5],tCols[6],tCols[7]].forEach(col=>{
@@ -1114,29 +1117,41 @@ function generatePDF(){
         doc.text(dv, cx+col.w/2, cy, {align:'center'});
         cx+=col.w;
       });
-    } else if(isProtanTrajet){
-      // Protan (rouge) + Deutan ref (gris)
-      doc.setFont('helvetica','bold');doc.setFontSize(fs);doc.setTextColor(...C.red);
-      const pw1=tCols[4].w+tCols[5].w; const pv=rPG||'-';
-      const pvLines=doc.splitTextToSize(pv, pw1-2);
-      doc.text(pvLines[0], cx+pw1/2, cy, {align:'center'}); cx+=pw1;
-      doc.setFont('helvetica','normal');doc.setTextColor(...C.gray);
-      const dw1=tCols[6].w+tCols[7].w; const dv=rDG||'-';
-      const dvLines=doc.splitTextToSize(dv, dw1-2);
-      doc.text(dvLines[0], cx+dw1/2, cy, {align:'center'}); cx+=dw1;
-    } else if(isDeutanTrajet){
-      // Protan ref (gris) + Deutan (rouge)
-      doc.setFont('helvetica','normal');doc.setFontSize(fs);doc.setTextColor(...C.gray);
-      const pw2=tCols[4].w+tCols[5].w; const pv2=rPG||'-';
-      const pv2Lines=doc.splitTextToSize(pv2, pw2-2);
-      doc.text(pv2Lines[0], cx+pw2/2, cy, {align:'center'}); cx+=pw2;
-      doc.setFont('helvetica','bold');doc.setTextColor(...C.red);
-      const dw2=tCols[6].w+tCols[7].w; const dv2=rDG||'-';
-      const dv2Lines=doc.splitTextToSize(dv2, dw2-2);
-      doc.text(dv2Lines[0], cx+dw2/2, cy, {align:'center'}); cx+=dw2;
+    } else if(isTrajet2627){
+      // Planches 26-27 : toujours afficher rPG (colspan2 Protan) et rDG (colspan2 Deutan)
+      // Couleur rouge si réponse patient correspond, gris sinon
+      const pw=tCols[4].w+tCols[5].w; const dw=tCols[6].w+tCols[7].w;
+      const protColor=(cat==='protG')?C.red:C.gray;
+      const deutColor=(cat==='deutG')?C.red:C.gray;
+      doc.setFont('helvetica', cat==='protG'?'bold':'normal');doc.setFontSize(fs);doc.setTextColor(...protColor);
+      const pvL=doc.splitTextToSize(rPG||'-', pw-2);
+      doc.text(pvL[0], cx+pw/2, cy, {align:'center'}); cx+=pw;
+      doc.setFont('helvetica', cat==='deutG'?'bold':'normal');doc.setTextColor(...deutColor);
+      const dvL=doc.splitTextToSize(rDG||'-', dw-2);
+      doc.text(dvL[0], cx+dw/2, cy, {align:'center'}); cx+=dw;
+    } else if(isTrajet2627){
+      // Planches 26-27 : rPG centré sur colspan2 Protan + rDG centré sur colspan2 Deutan
+      const pw=tCols[4].w+tCols[5].w;
+      const dw=tCols[6].w+tCols[7].w;
+      const xProtan=cx+pw/2;   // centre absolu des 2 cols Protan
+      const xDeutan=cx+pw+dw/2; // centre absolu des 2 cols Deutan
+      const protColor=(!isEmpty&&cat==='protG')?C.red:C.gray;
+      const deutColor=(!isEmpty&&cat==='deutG')?C.red:C.gray;
+      // Protan
+      doc.setFont('helvetica',(!isEmpty&&cat==='protG')?'bold':'normal');
+      doc.setFontSize(fs);
+      doc.setTextColor(...protColor);
+      doc.text(rPG||'-', xProtan, cy, {align:'center', maxWidth:pw-1});
+      // Deutan
+      doc.setFont('helvetica',(!isEmpty&&cat==='deutG')?'bold':'normal');
+      doc.setTextColor(...deutColor);
+      doc.text(rDG||'-', xDeutan, cy, {align:'center', maxWidth:dw-1});
+      cx+=pw+dw;
     } else {
+      // Planches 22-25 : 4 colonnes distinctes
       [{val:rPG,ci:4},{val:rPL,ci:5},{val:rDG,ci:6},{val:rDL,ci:7}].forEach(({val,ci})=>{
-        const isHL=(cat==='protG'&&ci===4)||(cat==='protL'&&ci===5)||(cat==='deutG'&&ci===6)||(cat==='deutL'&&ci===7);
+        const isHL=(!isEmpty)&&((cat==='protG'&&ci===4)||(cat==='protL'&&ci===5)||(cat==='deutG'&&ci===6)||(cat==='deutL'&&ci===7));
+        doc.setFont('helvetica',isHL?'bold':'normal');doc.setFontSize(fs);
         doc.setTextColor(isHL?C.red[0]:C.gray[0],isHL?C.red[1]:C.gray[1],isHL?C.red[2]:C.gray[2]);
         const v=String(val||'-');const vMax=Math.floor(tCols[ci].w/1.1);
         doc.text(v.length>vMax?v.slice(0,vMax-1)+'…':v,cx+tCols[ci].w/2,cy,{align:'center'});
