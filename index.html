@@ -255,7 +255,7 @@ body.numpad-open .scroll-area {
 .histo-pct.sub { color:#a0aec0; font-size:11px; }
 .detail-table { width:100%; border-collapse:collapse; font-size:12px; }
 .detail-table th { background:#2c5282; color:white; padding:6px 8px; text-align:center; font-weight:600; }
-.detail-table td { padding:5px 8px; text-align:center; border-bottom:1px solid #e2e8f0; }
+.detail-table td { padding:5px 8px; text-align:center; border-bottom:1px solid #e2e8f0; word-break:break-word; white-space:normal; }
 .detail-table tr:nth-child(even) td { background:#f7fafc; }
 /* Espace blanc entre colonne patient et colonne Normal — data rows + header row 1 */
 .detail-table tbody td:nth-child(2),
@@ -734,7 +734,7 @@ function computeResults(){
   else if(tauxErreur===0){vClass='verdict-ok';vText='Test normal : Aucune dyschromatopsie détectée.';}
   else if(tauxErreur<=20){vClass='verdict-dys';vText='⚠ Légères anomalies : À corréler cliniquement.';}
   else{vClass='verdict-dys';vText='Suspicion de dyschromatopsie : À corréler cliniquement.';}
-  document.getElementById('resTauxErr').textContent=tauxErreur.toFixed(1)+'%'; document.getElementById('resTauxErr').style.color=tauxErreur===0?'#22543d':'#c05621';
+  document.getElementById('resTauxErr').textContent=Math.round(tauxErreur)+'%'; document.getElementById('resTauxErr').style.color=tauxErreur===0?'#22543d':'#c05621';
   document.getElementById('resCorrect').textContent=correct+'/'+answered; document.getElementById('resCorrect').style.color=tauxErreur===0?'#22543d':'#2c5282';
   document.getElementById('resErrors').textContent=incorrect.length+'/'+answered; document.getElementById('resErrors').style.color=incorrect.length===0?'#22543d':'#c05621';
   const verd=document.getElementById('resVerdict'); verd.className='score-verdict '+vClass; verd.textContent=vText; verd.style.display=vText?'':'none';
@@ -817,8 +817,8 @@ function computeResults(){
     } else {
       const hPG=cat==='protG'?'cell-err':'',hPL=cat==='protL'?'cell-err':'',hDG=cat==='deutG'?'cell-err':'',hDL=cat==='deutL'?'cell-err':'';
       const nCls=(!isEmpty&&cat==='normale')?'cell-ok':'';
-      if(p.type==='trajet'&&cat==='protG'){ tr.innerHTML=`${numCell}${patCell}<td class="${nCls}">${rNorm}</td><td colspan="2" class="cell-err" style="text-align:center">${rPG}</td><td colspan="2" style="text-align:center">${rDG}</td>`; }
-      else if(p.type==='trajet'&&cat==='deutG'){ tr.innerHTML=`${numCell}${patCell}<td class="${nCls}">${rNorm}</td><td colspan="2" style="text-align:center">${rPG}</td><td colspan="2" class="cell-err" style="text-align:center">${rDG}</td>`; }
+      if(p.type==='trajet'&&cat==='protG'){ tr.innerHTML=`${numCell}${patCell}<td class="${nCls}">${rNorm}</td><td colspan="2" class="cell-err" style="text-align:center;white-space:normal">${rPG}</td><td colspan="2" style="text-align:center;white-space:normal;color:#718096">${rDG}</td>`; }
+      else if(p.type==='trajet'&&cat==='deutG'){ tr.innerHTML=`${numCell}${patCell}<td class="${nCls}">${rNorm}</td><td colspan="2" style="text-align:center;white-space:normal;color:#718096">${rPG}</td><td colspan="2" class="cell-err" style="text-align:center;white-space:normal">${rDG}</td>`; }
       else { const allVals=[rNorm,rPG,rPL,rDG,rDL].filter(v=>v); const allUnique=[...new Set(allVals)]; if(allUnique.length===1){const cls=(!isEmpty&&cat==='normale')?'cell-ok':(!isEmpty&&cat!=='autre'&&cat)?'cell-err':'';tr.innerHTML=`${numCell}${patCell}<td colspan="5" class="${cls}" style="text-align:center">${allUnique[0]}</td>`;}else{tr.innerHTML=`${numCell}${patCell}<td class="${nCls}">${rNorm}</td><td class="${hPG}">${rPG}</td><td class="${hPL}">${rPL}</td><td class="${hDG}">${rDG}</td><td class="${hDL}">${rDL}</td>`;} }
     }
     tbody.appendChild(tr);
@@ -961,16 +961,14 @@ function generatePDF(){
   doc.text('DÉTAIL DES RÉPONSES',ml,y);y+=4;
 
   // ── CALCUL DE L'ESPACE DISPONIBLE POUR LE TABLEAU (Fix 1) ──
-  // On connaît y ici (après séparateur+titre). Réserve logo + marge basse.
   const NEUTRES_PDF=new Set([1,38]);
   const tableRows=r.indices.filter(id=>!NEUTRES_PDF.has(id)&&PLANCHES_DATA[id]).length;
-  const logoH_est=15; // hauteur estimée du logo (mm)
-  const bottomMargin=10;
-  // y actuel + titre "DÉTAIL" (8pt + 4mm) + header tableau (6.5mm) + tableau + logo + marge
-  const yAfterTitre = y + 8; // titre + espace
-  const tableAvail = H - yAfterTitre - 6.5 - logoH_est - bottomMargin;
-  const minRH=3.2, maxRH=5;
-  const rH=Math.max(minRH, Math.min(maxRH, tableAvail/Math.max(tableRows,1)));
+  // Estimation du y après titre + séparateur déjà dessinés : +4mm pour titre DÉTAIL
+  const yTableStart = y + 8; // titre "DÉTAIL" (4mm texte + 4mm espace)
+  const logoH_est = 14; // hauteur logo estimée
+  const bottomMargin = 8;
+  const spaceForTable = H - yTableStart - 6.5 - logoH_est - bottomMargin;
+  const rH = Math.max(3.0, Math.min(4.8, spaceForTable / Math.max(tableRows, 1)));
   const gap=3; // espace blanc entre patient et normal
   const remW=cW-10-gap;
   const tCols=[
@@ -1108,28 +1106,32 @@ function generatePDF(){
     doc.setFontSize(fs);
 
     if(isSimple){
+      const totalW=tCols[4].w+tCols[5].w+tCols[6].w+tCols[7].w;
       const dv=rPG||rDG||'-';
-      const dMax=Math.floor((tCols[4].w+tCols[5].w+tCols[6].w+tCols[7].w)/1.1);
-      doc.setTextColor(...C.gray);
-      doc.text(dv.length>dMax?dv.slice(0,dMax-1)+'…':dv,
-        cx+(tCols[4].w+tCols[5].w+tCols[6].w+tCols[7].w)/2,cy,{align:'center'});
-      cx+=tCols[4].w+tCols[5].w+tCols[6].w+tCols[7].w;
+      doc.setFont('helvetica','normal');doc.setFontSize(fs);doc.setTextColor(...C.gray);
+      const dvL=doc.splitTextToSize(dv, totalW-2);
+      doc.text(dvL[0], cx+totalW/2, cy, {align:'center'});
+      cx+=totalW;
     } else if(isProtanTrajet){
-      // Fix 2&3: show protan in red (merged 2 cols) + deutan ref in gray (merged 2 cols)
-      doc.setTextColor(...C.red);
-      const pvMax=Math.floor((tCols[4].w+tCols[5].w)/1.1);const pv=rPG||'-';
-      doc.text(pv.length>pvMax?pv.slice(0,pvMax-1)+'…':pv,cx+(tCols[4].w+tCols[5].w)/2,cy,{align:'center'});cx+=tCols[4].w+tCols[5].w;
-      doc.setTextColor(...C.gray);
-      const dvMax=Math.floor((tCols[6].w+tCols[7].w)/1.1);const dv2=rDG||'-';
-      doc.text(dv2.length>dvMax?dv2.slice(0,dvMax-1)+'…':dv2,cx+(tCols[6].w+tCols[7].w)/2,cy,{align:'center'});cx+=tCols[6].w+tCols[7].w;
+      // Protan (rouge) + Deutan ref (gris)
+      doc.setFont('helvetica','bold');doc.setFontSize(fs);doc.setTextColor(...C.red);
+      const pw1=tCols[4].w+tCols[5].w; const pv=rPG||'-';
+      const pvLines=doc.splitTextToSize(pv, pw1-2);
+      doc.text(pvLines[0], cx+pw1/2, cy, {align:'center'}); cx+=pw1;
+      doc.setFont('helvetica','normal');doc.setTextColor(...C.gray);
+      const dw1=tCols[6].w+tCols[7].w; const dv=rDG||'-';
+      const dvLines=doc.splitTextToSize(dv, dw1-2);
+      doc.text(dvLines[0], cx+dw1/2, cy, {align:'center'}); cx+=dw1;
     } else if(isDeutanTrajet){
-      // Fix 2&3: show protan ref in gray + deutan in red
-      doc.setTextColor(...C.gray);
-      const pvMax=Math.floor((tCols[4].w+tCols[5].w)/1.1);const pv2=rPG||'-';
-      doc.text(pv2.length>pvMax?pv2.slice(0,pvMax-1)+'…':pv2,cx+(tCols[4].w+tCols[5].w)/2,cy,{align:'center'});cx+=tCols[4].w+tCols[5].w;
-      doc.setTextColor(...C.red);
-      const dvMax2=Math.floor((tCols[6].w+tCols[7].w)/1.1);const dv3=rDG||'-';
-      doc.text(dv3.length>dvMax2?dv3.slice(0,dvMax2-1)+'…':dv3,cx+(tCols[6].w+tCols[7].w)/2,cy,{align:'center'});cx+=tCols[6].w+tCols[7].w;
+      // Protan ref (gris) + Deutan (rouge)
+      doc.setFont('helvetica','normal');doc.setFontSize(fs);doc.setTextColor(...C.gray);
+      const pw2=tCols[4].w+tCols[5].w; const pv2=rPG||'-';
+      const pv2Lines=doc.splitTextToSize(pv2, pw2-2);
+      doc.text(pv2Lines[0], cx+pw2/2, cy, {align:'center'}); cx+=pw2;
+      doc.setFont('helvetica','bold');doc.setTextColor(...C.red);
+      const dw2=tCols[6].w+tCols[7].w; const dv2=rDG||'-';
+      const dv2Lines=doc.splitTextToSize(dv2, dw2-2);
+      doc.text(dv2Lines[0], cx+dw2/2, cy, {align:'center'}); cx+=dw2;
     } else {
       [{val:rPG,ci:4},{val:rPL,ci:5},{val:rDG,ci:6},{val:rDL,ci:7}].forEach(({val,ci})=>{
         const isHL=(cat==='protG'&&ci===4)||(cat==='protL'&&ci===5)||(cat==='deutG'&&ci===6)||(cat==='deutL'&&ci===7);
