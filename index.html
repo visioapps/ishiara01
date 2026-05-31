@@ -78,15 +78,32 @@ body {
   .header { padding: 8px 16px; }
   .header h1 { font-size: 18px; }
 }
-/* Mobile : date = icône seule, Binoculaire = Bino */
+/* Mobile : barre de progression en 2 rangées de 19 ronds centrées, date icône seule */
 @media (max-width: 600px) {
+  .dots-row { flex-wrap: wrap !important; justify-content: center !important; gap: 5px !important; }
+  .dot-circle { margin: 0 !important; }
   .date-label { display: none; }
   .date-pill { position: relative; overflow: hidden; }
-  .date-pill input[type=date] {
-    position: absolute; top:0; left:0; width:100%; height:100%;
-    opacity: 0; cursor: pointer;
-  }
+  .date-pill input[type=date] { position: absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer; }
 }
+
+/* Clavier numérique personnalisé (mobile chiffres) */
+#numPad {
+  display: none; position: fixed; bottom:0; left:0; right:0; z-index:8999;
+  background: #e8eef5; border-top:1px solid #cbd5e0;
+  padding: 8px 12px; padding-bottom: max(8px, env(safe-area-inset-bottom,8px));
+}
+#numPad.visible { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; align-items:center; }
+.np-btn {
+  width:44px; height:36px; background:white; border:1px solid #cbd5e0; border-radius:7px;
+  font-size:15px; font-weight:600; color:#2d3748;
+  cursor:pointer; display:flex; align-items:center; justify-content:center; user-select:none;
+}
+.np-btn:active { background:#ebf4fb; }
+.np-btn.np-del { color:#c53030; font-size:18px; }
+.np-btn.np-ok  { background:#4299e1; color:white; border-color:#3182ce; min-width:60px; }
+body.numpad-open .bottom-nav { bottom:56px; }
+body.numpad-open .scroll-area { padding-bottom:calc(130px + env(safe-area-inset-bottom,0px)); }
 
 .controls-bar {
   background: white; border-radius: 12px; padding: 10px; margin-bottom: 12px;
@@ -360,6 +377,22 @@ body {
   </div>
 </div>
 
+<!-- Clavier numérique personnalisé -->
+<div id="numPad">
+  <button class="np-btn" onclick="npKey('1')">1</button>
+  <button class="np-btn" onclick="npKey('2')">2</button>
+  <button class="np-btn" onclick="npKey('3')">3</button>
+  <button class="np-btn" onclick="npKey('4')">4</button>
+  <button class="np-btn" onclick="npKey('5')">5</button>
+  <button class="np-btn" onclick="npKey('6')">6</button>
+  <button class="np-btn" onclick="npKey('7')">7</button>
+  <button class="np-btn" onclick="npKey('8')">8</button>
+  <button class="np-btn" onclick="npKey('9')">9</button>
+  <button class="np-btn" onclick="npKey('0')">0</button>
+  <button class="np-btn np-del" onclick="npDel()">⌫</button>
+  <button class="np-btn np-ok"  onclick="npClose()">OK</button>
+</div>
+
 <div class="toast" id="toast"></div>
 <script>
 const PLANCHES_DATA = {
@@ -453,6 +486,11 @@ function buildPlanches(){
     if(p.type==='chiffre'){
       const inp=document.createElement('input'); inp.type='text'; inp.className='answer-input';
       inp.placeholder=''; inp.maxLength=8; inp.autocomplete='off';
+      inp.setAttribute('inputmode','none'); // désactive le clavier natif mobile
+      inp.setAttribute('readonly',''); // empêche le clavier sur iOS
+      // Sur desktop, on retire readonly pour permettre la saisie clavier
+      inp.addEventListener('focus',()=>{ if(window.innerWidth<=600){ npOpen(inp); } else { inp.removeAttribute('readonly'); } });
+      inp.addEventListener('blur',()=>{ inp.setAttribute('readonly',''); });
       const storedVal=answers[id]||''; inp.value=storedVal==='x'?'Non vu':storedVal; inp.id=`inp-${id}`;
       inp.addEventListener('input',()=>{
         let raw=inp.value.trim();
@@ -646,15 +684,29 @@ function computeResults(){
   indices.forEach(id=>{
     const p=PLANCHES_DATA[id]; if(!p)return;
     const isEmpty=p.type==='chiffre'?!(answers[id]||'').trim():!(answers[id]||[]).length;
-    if(isEmpty)return; answered++; let ok=false;
+    if(isEmpty)return;
+    // Planches 1 & 38 : planche de contrôle uniquement — exclues du score global ET de la répartition
+    if(NEUTRES.has(id)){
+      if(p.type==='chiffre'){
+        const cat=classifyChiffreAnswer(id,(answers[id]||'').trim());
+        const isKnown=(cat&&cat!=='autre');
+        if(!isKnown)cIncoh++;
+      } else {
+        const arr=answers[id]||[]; const cL=p.options.filter(o=>o.correct).map(o=>o.label);
+        const ok=arr.length>0&&cL.every(l=>arr.includes(l))&&arr.every(l=>cL.includes(l));
+        if(!ok&&arr.length>0)cIncoh++;
+      }
+      return; // ne pas compter dans answered/correct/incorrect
+    }
+    answered++; let ok=false;
     if(p.type==='chiffre'){
       const raw=(answers[id]||'').trim(); const cat=classifyChiffreAnswer(id,raw);
-      if(NEUTRES.has(id)){ const isKnown=(cat&&cat!=='autre'); ok=isKnown; if(!isKnown)cIncoh++; }
-      else { ok=(cat==='normale'); if(!ok){ cDysRV++; if(SOUS_TYPES.has(id)){ if(cat==='protG')cProtG++; else if(cat==='protL')cProtL++; else if(cat==='deutG')cDeutG++; else if(cat==='deutL')cDeutL++; } } }
+      ok=(cat==='normale');
+      if(!ok){ cDysRV++; if(SOUS_TYPES.has(id)){ if(cat==='protG')cProtG++; else if(cat==='protL')cProtL++; else if(cat==='deutG')cDeutG++; else if(cat==='deutL')cDeutL++; } }
     } else {
       const arr=answers[id]||[]; const cL=p.options.filter(o=>o.correct).map(o=>o.label);
-      if(NEUTRES.has(id)){ ok=arr.length>0&&cL.every(l=>arr.includes(l))&&arr.every(l=>cL.includes(l)); if(!ok&&arr.length>0)cIncoh++; }
-      else { ok=arr.length>0&&cL.every(l=>arr.includes(l))&&arr.every(l=>cL.includes(l)); if(!ok&&arr.length>0){ cDysRV++; if(SOUS_TYPES.has(id)){ const tag=p.options.find(o=>arr.includes(o.label)&&!o.correct)?.tag||''; if(tag==='protG')cProtG++; else if(tag==='protL')cProtL++; else if(tag==='deutG')cDeutG++; else if(tag==='deutL')cDeutL++; } } }
+      ok=arr.length>0&&cL.every(l=>arr.includes(l))&&arr.every(l=>cL.includes(l));
+      if(!ok&&arr.length>0){ cDysRV++; if(SOUS_TYPES.has(id)){ const tag=p.options.find(o=>arr.includes(o.label)&&!o.correct)?.tag||''; if(tag==='protG')cProtG++; else if(tag==='protL')cProtL++; else if(tag==='deutG')cDeutG++; else if(tag==='deutL')cDeutL++; } }
     }
     if(ok)correct++; else incorrect.push(id);
   });
@@ -689,13 +741,17 @@ function computeResults(){
   if(pDysRV>0&&sousTypesFilled){
     const totalProtDeut=cProtG+cProtL+cDeutG+cDeutL||1;
     const pProtTot=Math.round((cProtG+cProtL)/totalProtDeut*100); const pDeutTot=100-pProtTot;
-    const formatForm=(cG,cL)=>{ if(!severityFilled)return''; const tot=cG+cL; if(!tot)return''; if(cG>cL)return` (forme grave ${Math.round(cG/tot*100)}%)`; if(cL>cG)return` (forme légère ${Math.round(cL/tot*100)}%)`; return''; };
+    const formatForm=(cG,cL)=>{
+      if(!severityFilled)return'';
+      const tot=cG+cL; if(!tot)return'';
+      if(cG>0&&cL===0) return ' (forme grave)';
+      if(cL>0&&cG===0) return ' (forme légère)';
+      return ' (forme légère à grave)';
+    };
     const hasSub=(cProtG+cProtL+cDeutG+cDeutL)>0;
     if(hasSub){
       addHisLine(`↳ Protan${formatForm(cProtG,cProtL)}`,pProtTot,true,false);
-      if(cProtG>0&&cProtL>0&&cProtG!==cProtL){ addHisLine('&nbsp;&nbsp;&nbsp;• grave',Math.round(cProtG/(cProtG+cProtL)*100),true,false); addHisLine('&nbsp;&nbsp;&nbsp;• léger',Math.round(cProtL/(cProtG+cProtL)*100),true,false); }
       addHisLine(`↳ Deutan${formatForm(cDeutG,cDeutL)}`,pDeutTot,true,false);
-      if(cDeutG>0&&cDeutL>0&&cDeutG!==cDeutL){ addHisLine('&nbsp;&nbsp;&nbsp;• grave',Math.round(cDeutG/(cDeutG+cDeutL)*100),true,false); addHisLine('&nbsp;&nbsp;&nbsp;• léger',Math.round(cDeutL/(cDeutG+cDeutL)*100),true,false); }
     } else { addHisLine('↳ Protan',0,true,false); addHisLine('↳ Deutan',0,true,false); }
   }
   // Achromatopsie totale : supprimée de la répartition par type
@@ -871,12 +927,9 @@ function generatePDF(){
   if(r.pDysRV>0){
     const totalPD=(r.cProtG+r.cProtL+r.cDeutG+r.cDeutL)||1;
     const pProt=Math.round((r.cProtG+r.cProtL)/totalPD*100);
-    pdfBar('Protan',pProt,1);
-    if(r.cProtG>0) pdfBar('• grave',Math.round(r.cProtG/(r.cProtG+r.cProtL||1)*100),2);
-    if(r.cProtL>0) pdfBar('• léger',Math.round(r.cProtL/(r.cProtG+r.cProtL||1)*100),2);
-    pdfBar('Deutan',100-pProt,1);
-    if(r.cDeutG>0) pdfBar('• grave',Math.round(r.cDeutG/(r.cDeutG+r.cDeutL||1)*100),2);
-    if(r.cDeutL>0) pdfBar('• léger',Math.round(r.cDeutL/(r.cDeutG+r.cDeutL||1)*100),2);
+    const fmtF=(cG,cL)=>{ if(!cG&&!cL)return''; if(cG>0&&cL===0)return' (forme grave)'; if(cL>0&&cG===0)return' (forme légère)'; return' (légère à grave)'; };
+    pdfBar('Protan'+fmtF(r.cProtG,r.cProtL),pProt,1);
+    pdfBar('Deutan'+fmtF(r.cDeutG,r.cDeutL),100-pProt,1);
   }
   y+=2;
 
@@ -970,19 +1023,32 @@ function generatePDF(){
     }
 
     // Fond alterné
+    // Fix 5: highlight the full merged cell for simple planches
     if(rowIdx%2===0){doc.setFillColor(...C.lightGray);doc.rect(ml,y,cW,rH,'F');}
     // Espace blanc entre col patient et col normal
     doc.setFillColor(...C.white);doc.rect(ml+tCols[0].w+tCols[1].w,y,tCols[2].w,rH,'F');
 
-    // Surlignage colonne réponse correcte
+    // Surlignage : colonne normale OU zone dyschro fusionnée
+    const isSimple=(id>=1&&id<=21)||(id>=28&&id<=37);
+    const isProtanTrajet=(p.type==='trajet'&&cat==='protG');
+    const isDeutanTrajet=(p.type==='trajet'&&cat==='deutG');
     if(!isEmpty&&cat==='normale'){
       doc.setFillColor(...C.lightGreen);doc.rect(ml+tCols[0].w+tCols[1].w+tCols[2].w,y,tCols[3].w,rH,'F');
     } else if(!isEmpty&&cat&&cat!=='normale'&&cat!=='autre'&&cat!=='nonvu'){
-      const colMap={protG:4,protL:5,deutG:6,deutL:7};
-      const col=colMap[cat];
-      if(col){
-        const cx2=tCols.slice(0,col).reduce((s,c)=>s+c.w,ml);
-        doc.setFillColor(...C.lightRed);doc.rect(cx2,y,tCols[col].w,rH,'F');
+      if(isSimple){
+        // Colonne dyschro fusionnée (4 cols) → surligner toute la zone
+        const x4=ml+tCols[0].w+tCols[1].w+tCols[2].w+tCols[3].w;
+        const w4=tCols[4].w+tCols[5].w+tCols[6].w+tCols[7].w;
+        doc.setFillColor(...C.lightRed);doc.rect(x4,y,w4,rH,'F');
+      } else if(isProtanTrajet){
+        const x4=ml+tCols[0].w+tCols[1].w+tCols[2].w+tCols[3].w;
+        doc.setFillColor(...C.lightRed);doc.rect(x4,y,tCols[4].w+tCols[5].w,rH,'F');
+      } else if(isDeutanTrajet){
+        const x4=ml+tCols[0].w+tCols[1].w+tCols[2].w+tCols[3].w+tCols[4].w+tCols[5].w;
+        doc.setFillColor(...C.lightRed);doc.rect(x4,y,tCols[6].w+tCols[7].w,rH,'F');
+      } else {
+        const colMap={protG:4,protL:5,deutG:6,deutL:7};const col=colMap[cat];
+        if(col){doc.setFillColor(...C.lightRed);const cx2=tCols.slice(0,col).reduce((s,c)=>s+c.w,ml);doc.rect(cx2,y,tCols[col].w,rH,'F');}
       }
     }
 
@@ -1012,9 +1078,6 @@ function generatePDF(){
 
     // Colonnes dyschro
     doc.setFontSize(fs);
-    const isSimple=(id>=1&&id<=21)||(id>=28&&id<=37);
-    const isProtanTrajet=(p.type==='trajet'&&cat==='protG');
-    const isDeutanTrajet=(p.type==='trajet'&&cat==='deutG');
 
     if(isSimple){
       const dv=rPG||rDG||'-';
@@ -1058,7 +1121,8 @@ function generatePDF(){
         canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
         canvas.getContext('2d').drawImage(img,0,0);
         const imgData=canvas.toDataURL('image/png');
-        const logoW=40, logoH=Math.min(20, logoW*(img.naturalHeight/img.naturalWidth));
+        const ratio=img.naturalHeight/img.naturalWidth;
+        const logoW=40, logoH=logoW*ratio; // ratio conservé
         const logoX=(W-logoW)/2;
         const logoY=Math.min(y+6, H-logoH-6);
         doc.addImage(imgData,'PNG',logoX,logoY,logoW,logoH);
@@ -1077,6 +1141,31 @@ function generatePDF(){
     closePdfModal(); showToast('PDF téléchargé');
   }
 }
+// ── CLAVIER NUMÉRIQUE PERSONNALISÉ ──
+let _npTarget = null;
+function npOpen(inp){
+  _npTarget=inp; document.getElementById('numPad').classList.add('visible');
+  document.body.classList.add('numpad-open');
+}
+function npClose(){
+  document.getElementById('numPad').classList.remove('visible');
+  document.body.classList.remove('numpad-open');
+  if(_npTarget) _npTarget.blur(); _npTarget=null;
+}
+function npKey(k){
+  if(!_npTarget)return;
+  _npTarget.value+=k; _npTarget.dispatchEvent(new Event('input'));
+}
+function npDel(){
+  if(!_npTarget)return;
+  _npTarget.value=_npTarget.value.slice(0,-1); _npTarget.dispatchEvent(new Event('input'));
+}
+// Fermer si clic hors du pad
+document.addEventListener('click',e=>{
+  const pad=document.getElementById('numPad');
+  if(!pad.classList.contains('visible'))return;
+  if(!pad.contains(e.target)&&!(_npTarget&&_npTarget.contains(e.target))) npClose();
+},{capture:true});
 function updateDateLabel(){
   const d=document.getElementById('dateExamen');
   const lbl=document.getElementById('dateLabel');
