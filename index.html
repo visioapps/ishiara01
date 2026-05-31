@@ -749,10 +749,15 @@ function computeResults(){
   }
   addHisLine('Vision normale',pNormal,false,pNormal>=pDysRV);
   addHisLine('Dyschromatopsie Rouge / Vert',pDysRV,false,pDysRV>pNormal);
-  const SOUS_TYPES_PLATES=[22,23,24,25,26,27]; const SEVERITY_PLATES=[22,23,24,25];
-  const isPlateFilled=id=>{ const p=PLANCHES_DATA[id];if(!p)return false; if(p.type==='chiffre')return !!(answers[id]||'').trim(); return(answers[id]||[]).length>0; };
-  const sousTypesFilled=SOUS_TYPES_PLATES.some(isPlateFilled); const severityFilled=SEVERITY_PLATES.some(isPlateFilled);
-  if(pDysRV>0&&sousTypesFilled){
+  // Fix 4: Protan/Deutan uniquement si planches 22-27 testées ET réponses dyschro détectées là
+  const SOUS_TYPES_PLATES=[22,23,24,25,26,27];
+  const isPlateFilled=id=>{ const p=PLANCHES_DATA[id];if(!p||!indices.includes(id))return false; if(p.type==='chiffre')return !!(answers[id]||'').trim(); return(answers[id]||[]).length>0; };
+  const sousTypesFilled=SOUS_TYPES_PLATES.some(isPlateFilled);
+  const SEVERITY_PLATES=[22,23,24,25];
+  const severityFilled=SEVERITY_PLATES.some(isPlateFilled);
+  // Il faut au moins une réponse dyschro sur 22-27 pour afficher Protan/Deutan
+  const hasDysOn2227=(cProtG+cProtL+cDeutG+cDeutL)>0;
+  if(pDysRV>0&&sousTypesFilled&&hasDysOn2227){
     const totalProtDeut=cProtG+cProtL+cDeutG+cDeutL||1;
     const pProtTot=Math.round((cProtG+cProtL)/totalProtDeut*100); const pDeutTot=100-pProtTot;
     const formatForm=(cG,cL)=>{
@@ -812,8 +817,8 @@ function computeResults(){
     } else {
       const hPG=cat==='protG'?'cell-err':'',hPL=cat==='protL'?'cell-err':'',hDG=cat==='deutG'?'cell-err':'',hDL=cat==='deutL'?'cell-err':'';
       const nCls=(!isEmpty&&cat==='normale')?'cell-ok':'';
-      if(p.type==='trajet'&&cat==='protG'){ tr.innerHTML=`${numCell}${patCell}<td class="${nCls}">${rNorm}</td><td colspan="2" class="cell-err" style="text-align:center">${rPG}</td><td></td><td></td>`; }
-      else if(p.type==='trajet'&&cat==='deutG'){ tr.innerHTML=`${numCell}${patCell}<td class="${nCls}">${rNorm}</td><td></td><td></td><td colspan="2" class="cell-err" style="text-align:center">${rDG}</td>`; }
+      if(p.type==='trajet'&&cat==='protG'){ tr.innerHTML=`${numCell}${patCell}<td class="${nCls}">${rNorm}</td><td colspan="2" class="cell-err" style="text-align:center">${rPG}</td><td colspan="2" style="text-align:center">${rDG}</td>`; }
+      else if(p.type==='trajet'&&cat==='deutG'){ tr.innerHTML=`${numCell}${patCell}<td class="${nCls}">${rNorm}</td><td colspan="2" style="text-align:center">${rPG}</td><td colspan="2" class="cell-err" style="text-align:center">${rDG}</td>`; }
       else { const allVals=[rNorm,rPG,rPL,rDG,rDL].filter(v=>v); const allUnique=[...new Set(allVals)]; if(allUnique.length===1){const cls=(!isEmpty&&cat==='normale')?'cell-ok':(!isEmpty&&cat!=='autre'&&cat)?'cell-err':'';tr.innerHTML=`${numCell}${patCell}<td colspan="5" class="${cls}" style="text-align:center">${allUnique[0]}</td>`;}else{tr.innerHTML=`${numCell}${patCell}<td class="${nCls}">${rNorm}</td><td class="${hPG}">${rPG}</td><td class="${hPL}">${rPL}</td><td class="${hDG}">${rDG}</td><td class="${hDL}">${rDL}</td>`;} }
     }
     tbody.appendChild(tr);
@@ -938,7 +943,7 @@ function generatePDF(){
 
   pdfBar('Vision normale', Math.round(Number(r.pNormal)||0), 0);
   pdfBar('Dyschromatopsie Rouge / Vert', Math.round(Number(r.pDysRV)||0), 0);
-  if(r.pDysRV>0){
+  if(r.pDysRV>0 && (r.cProtG+r.cProtL+r.cDeutG+r.cDeutL)>0){
     const totalPD=(r.cProtG+r.cProtL+r.cDeutG+r.cDeutL)||1;
     const pProt=Math.round((r.cProtG+r.cProtL)/totalPD*100);
     const fmtF=(cG,cL)=>{ if(!cG&&!cL)return''; if(cG>0&&cL===0)return' (forme grave)'; if(cL>0&&cG===0)return' (forme légère)'; return' (légère à grave)'; };
@@ -954,7 +959,16 @@ function generatePDF(){
   doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(...C.navy);
   doc.text('DÉTAIL DES RÉPONSES',ml,y);y+=4;
 
-  // Colonnes : N° | Rép. patient | [espace] | Normal | PG | PL | DG | DL
+  // ── CALCUL DE L'ESPACE DISPONIBLE POUR LE TABLEAU ──
+  // Compte les lignes (hors planches 1 et 38)
+  const NEUTRES_PDF=new Set([1,38]);
+  const tableRows=r.indices.filter(id=>!NEUTRES_PDF.has(id)&&PLANCHES_DATA[id]).length;
+  const logoReserve=20; // espace pour le logo
+  const tableAvail=H-y-10-logoReserve; // espace dispo pour tableau + logo
+  const hdrH=6.5;
+  const minRH=3.5, maxRH=5;
+  // Ajuster la hauteur de ligne pour que tout tienne
+  const rH=Math.max(minRH, Math.min(maxRH, (tableAvail-hdrH)/Math.max(tableRows,1)));
   const gap=3; // espace blanc entre patient et normal
   const remW=cW-10-gap;
   const tCols=[
@@ -992,8 +1006,6 @@ function generatePDF(){
 
   y=drawTableHeader(y);
 
-  const rH=5;
-  const NEUTRES_PDF=new Set([1,38]);
   let rowIdx=0;
 
   r.indices.forEach(id=>{
@@ -1101,17 +1113,21 @@ function generatePDF(){
         cx+(tCols[4].w+tCols[5].w+tCols[6].w+tCols[7].w)/2,cy,{align:'center'});
       cx+=tCols[4].w+tCols[5].w+tCols[6].w+tCols[7].w;
     } else if(isProtanTrajet){
+      // Fix 2&3: show protan in red (merged 2 cols) + deutan ref in gray (merged 2 cols)
       doc.setTextColor(...C.red);
-      doc.text(rPG||'-',cx+(tCols[4].w+tCols[5].w)/2,cy,{align:'center'});cx+=tCols[4].w+tCols[5].w;
+      const pvMax=Math.floor((tCols[4].w+tCols[5].w)/1.1);const pv=rPG||'-';
+      doc.text(pv.length>pvMax?pv.slice(0,pvMax-1)+'…':pv,cx+(tCols[4].w+tCols[5].w)/2,cy,{align:'center'});cx+=tCols[4].w+tCols[5].w;
       doc.setTextColor(...C.gray);
-      doc.text('-',cx+tCols[6].w/2,cy,{align:'center'});cx+=tCols[6].w;
-      doc.text('-',cx+tCols[7].w/2,cy,{align:'center'});cx+=tCols[7].w;
+      const dvMax=Math.floor((tCols[6].w+tCols[7].w)/1.1);const dv2=rDG||'-';
+      doc.text(dv2.length>dvMax?dv2.slice(0,dvMax-1)+'…':dv2,cx+(tCols[6].w+tCols[7].w)/2,cy,{align:'center'});cx+=tCols[6].w+tCols[7].w;
     } else if(isDeutanTrajet){
+      // Fix 2&3: show protan ref in gray + deutan in red
       doc.setTextColor(...C.gray);
-      doc.text('-',cx+tCols[4].w/2,cy,{align:'center'});cx+=tCols[4].w;
-      doc.text('-',cx+tCols[5].w/2,cy,{align:'center'});cx+=tCols[5].w;
+      const pvMax=Math.floor((tCols[4].w+tCols[5].w)/1.1);const pv2=rPG||'-';
+      doc.text(pv2.length>pvMax?pv2.slice(0,pvMax-1)+'…':pv2,cx+(tCols[4].w+tCols[5].w)/2,cy,{align:'center'});cx+=tCols[4].w+tCols[5].w;
       doc.setTextColor(...C.red);
-      doc.text(rDG||'-',cx+(tCols[6].w+tCols[7].w)/2,cy,{align:'center'});cx+=tCols[6].w+tCols[7].w;
+      const dvMax2=Math.floor((tCols[6].w+tCols[7].w)/1.1);const dv3=rDG||'-';
+      doc.text(dv3.length>dvMax2?dv3.slice(0,dvMax2-1)+'…':dv3,cx+(tCols[6].w+tCols[7].w)/2,cy,{align:'center'});cx+=tCols[6].w+tCols[7].w;
     } else {
       [{val:rPG,ci:4},{val:rPL,ci:5},{val:rDG,ci:6},{val:rDL,ci:7}].forEach(({val,ci})=>{
         const isHL=(cat==='protG'&&ci===4)||(cat==='protL'&&ci===5)||(cat==='deutG'&&ci===6)||(cat==='deutL'&&ci===7);
